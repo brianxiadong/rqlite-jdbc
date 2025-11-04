@@ -76,16 +76,16 @@ public class L4Statement {
     if (sql == null || sql.trim().isEmpty()) {
       throw new IllegalStateException("SQL statement cannot be null or empty");
     }
-    var out = new JsonArray();
+    JsonArray out = new JsonArray();
     out.add(sql);
     if (!namedParams.isEmpty()) {
-      var paramsObject = new JsonObject();
-      for (var entry : namedParams.entrySet()) {
+      JsonObject paramsObject = new JsonObject();
+      for (Map.Entry<String, Object> entry : namedParams.entrySet()) {
         paramsObject.add(entry.getKey(), L4Json.toJsonValue(entry.getValue()));
       }
       out.add(paramsObject);
     } else if (!positionalParams.isEmpty()) {
-      for (var param : positionalParams) {
+      for (Object param : positionalParams) {
         out.add(L4Json.toJsonValue(param));
       }
     }
@@ -93,8 +93,8 @@ public class L4Statement {
   }
 
   public static JsonValue toArray(L4Statement... statements) {
-    var smtList = Json.array();
-    for (var smt : statements) {
+    JsonArray smtList = Json.array();
+    for (L4Statement smt : statements) {
       smtList.add(smt.build());
     }
     return smtList;

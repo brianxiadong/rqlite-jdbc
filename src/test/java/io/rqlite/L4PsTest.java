@@ -37,14 +37,14 @@ public class L4PsTest {
 
       it("Tests L4Ps query execution and parameter setting", () -> {
         setupPreparedStatementTestTable(rq);
-        var insertSql = "INSERT INTO ps_test_data (" +
+        String insertSql = "INSERT INTO ps_test_data (" +
           "num_val, bool_val, tiny_val, small_val, int_val, big_val, float_val, double_val, " +
           "text_val, date_val, time_val, ts_val, url_val, clob_val, nclob_val, nstring_val, blob_val" +
           ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        var ps = new L4Ps(rq, insertSql);
+        L4Ps ps = new L4Ps(rq, insertSql);
 
         // Set parameters
-        var blobData = "Hello, rqlite!".getBytes(StandardCharsets.UTF_8);
+        byte[] blobData = "Hello, rqlite!".getBytes(StandardCharsets.UTF_8);
         ps.setBigDecimal(1, new BigDecimal("123.45")); // num_val
         ps.setBoolean(2, true); // bool_val
         ps.setByte(3, (byte) 127); // tiny_val
@@ -68,9 +68,9 @@ public class L4PsTest {
         assertEquals(1, rowsAffected);
 
         // Query and verify
-        var selectPs = new L4Ps(rq, "SELECT * FROM ps_test_data WHERE id = ?");
+        L4Ps selectPs = new L4Ps(rq, "SELECT * FROM ps_test_data WHERE id = ?");
         selectPs.setInt(1, 1);
-        var rs = selectPs.executeQuery();
+        ResultSet rs = selectPs.executeQuery();
         assertTrue(rs.next());
         assertEquals(1, rs.getInt("id"));
         assertEquals(new BigDecimal("123.45"), rs.getBigDecimal("num_val"));
@@ -111,17 +111,17 @@ public class L4PsTest {
 
       it("Tests L4Ps stream and LOB parameter setting", () -> {
         setupPreparedStatementTestTable(rq);
-        var insertSql = "INSERT INTO ps_test_data (text_val, clob_val, nclob_val, nstring_val, blob_val) VALUES (?, ?, ?, ?, ?)";
-        var ps = new L4Ps(rq, insertSql);
+        String insertSql = "INSERT INTO ps_test_data (text_val, clob_val, nclob_val, nstring_val, blob_val) VALUES (?, ?, ?, ?, ?)";
+        L4Ps ps = new L4Ps(rq, insertSql);
 
         // Set stream and LOB parameters
-        var text = "Stream text";
-        var clobText = "CLOB content";
-        var nclobText = "NCLOB content";
-        var nstringText = "NSTRING content";
-        var blobData = "BLOB data".getBytes(StandardCharsets.UTF_8);
+        String text = "Stream text";
+        String clobText = "CLOB content";
+        String nclobText = "NCLOB content";
+        String nstringText = "NSTRING content";
+        byte[] blobData = "BLOB data".getBytes(StandardCharsets.UTF_8);
 
-        var clob = new L4NClob();
+        L4NClob clob = new L4NClob();
         clob.setString(1, nclobText);
 
         ps.setAsciiStream(1, new ByteArrayInputStream(text.getBytes(StandardCharsets.US_ASCII)), text.length());
@@ -135,9 +135,9 @@ public class L4PsTest {
         assertEquals(1, rowsAffected);
 
         // Verify
-        var selectPs = new L4Ps(rq, "SELECT text_val, clob_val, nclob_val, nstring_val, blob_val FROM ps_test_data WHERE id = ?");
+        L4Ps selectPs = new L4Ps(rq, "SELECT text_val, clob_val, nclob_val, nstring_val, blob_val FROM ps_test_data WHERE id = ?");
         selectPs.setInt(1, 1);
-        var rs = selectPs.executeQuery();
+        ResultSet rs = selectPs.executeQuery();
         assertTrue(rs.next());
         assertEquals(text, rs.getString("text_val"));
         assertEquals(clobText, rs.getClob("clob_val").getSubString(1, clobText.length()));
@@ -152,8 +152,8 @@ public class L4PsTest {
 
       it("Tests L4Ps batch execution", () -> {
         setupPreparedStatementTestTable(rq);
-        var insertSql = "INSERT INTO ps_test_data (num_val, text_val) VALUES (?, ?)";
-        var ps = new L4Ps(rq, insertSql);
+        String insertSql = "INSERT INTO ps_test_data (num_val, text_val) VALUES (?, ?)";
+        L4Ps ps = new L4Ps(rq, insertSql);
 
         // Add batch entries
         ps.setBigDecimal(1, new BigDecimal("111.11"));
@@ -168,8 +168,8 @@ public class L4PsTest {
         assertArrayEquals(new int[]{1, 1}, updateCounts);
 
         // Verify
-        var selectPs = new L4Ps(rq, "SELECT num_val, text_val FROM ps_test_data ORDER BY id");
-        var rs = selectPs.executeQuery();
+        L4Ps selectPs = new L4Ps(rq, "SELECT num_val, text_val FROM ps_test_data ORDER BY id");
+        ResultSet rs = selectPs.executeQuery();
         assertTrue(rs.next());
         assertEquals(new BigDecimal("111.11"), rs.getBigDecimal("num_val"));
         assertEquals("First", rs.getString("text_val"));
@@ -190,12 +190,12 @@ public class L4PsTest {
 
       it("Tests L4Ps metadata retrieval", () -> {
         setupPreparedStatementTestTable(rq);
-        var selectSql = "SELECT * FROM ps_test_data WHERE id = ?";
-        var ps = new L4Ps(rq, selectSql);
+        String selectSql = "SELECT * FROM ps_test_data WHERE id = ?";
+        L4Ps ps = new L4Ps(rq, selectSql);
 
         // Test getMetaData
         ps.setInt(1, 999);
-        var meta = ps.getMetaData();
+        ResultSetMetaData meta = ps.getMetaData();
 
         assertEquals(18, meta.getColumnCount());
         assertEquals(Types.INTEGER, meta.getColumnType(1)); // id
@@ -209,8 +209,8 @@ public class L4PsTest {
 
       it("Tests L4Ps null and object parameter setting", () -> {
         setupPreparedStatementTestTable(rq);
-        var insertSql = "INSERT INTO ps_test_data (num_val, text_val, blob_val) VALUES (?, ?, ?)";
-        var ps = new L4Ps(rq, insertSql);
+        String insertSql = "INSERT INTO ps_test_data (num_val, text_val, blob_val) VALUES (?, ?, ?)";
+        L4Ps ps = new L4Ps(rq, insertSql);
 
         // Set null and object parameters
         ps.setNull(1, Types.NUMERIC);
@@ -220,9 +220,9 @@ public class L4PsTest {
         assertEquals(1, rowsAffected);
 
         // Verify
-        var selectPs = new L4Ps(rq, "SELECT num_val, text_val, blob_val FROM ps_test_data WHERE id = ?");
+        L4Ps selectPs = new L4Ps(rq, "SELECT num_val, text_val, blob_val FROM ps_test_data WHERE id = ?");
         selectPs.setInt(1, 1);
-        var rs = selectPs.executeQuery();
+        ResultSet rs = selectPs.executeQuery();
         assertTrue(rs.next());
         assertNull(rs.getBigDecimal("num_val"));
         assertTrue(rs.wasNull());
@@ -237,15 +237,15 @@ public class L4PsTest {
 
       it("Tests L4Ps advanced stream and LOB methods", () -> {
         setupPreparedStatementTestTable(rq);
-        var insertSql = "INSERT INTO ps_test_data (text_val, clob_val, nclob_val, nstring_val, blob_val) VALUES (?, ?, ?, ?, ?)";
-        var ps = new L4Ps(rq, insertSql);
+        String insertSql = "INSERT INTO ps_test_data (text_val, clob_val, nclob_val, nstring_val, blob_val) VALUES (?, ?, ?, ?, ?)";
+        L4Ps ps = new L4Ps(rq, insertSql);
 
         // Set advanced stream and LOB parameters
-        var text = "Advanced stream";
-        var clobText = "Advanced CLOB";
-        var nclobText = "Advanced NCLOB";
-        var nstringText = "Advanced NSTRING";
-        var blobData = "Advanced BLOB".getBytes(StandardCharsets.UTF_8);
+        String text = "Advanced stream";
+        String clobText = "Advanced CLOB";
+        String nclobText = "Advanced NCLOB";
+        String nstringText = "Advanced NSTRING";
+        byte[] blobData = "Advanced BLOB".getBytes(StandardCharsets.UTF_8);
 
         ps.setAsciiStream(1, new ByteArrayInputStream(text.getBytes(StandardCharsets.US_ASCII)));
         ps.setClob(2, new StringReader(clobText));
@@ -257,9 +257,9 @@ public class L4PsTest {
         assertEquals(1, rowsAffected);
 
         // Verify
-        var selectPs = new L4Ps(rq, "SELECT text_val, clob_val, nclob_val, nstring_val, blob_val FROM ps_test_data WHERE id = ?");
+        L4Ps selectPs = new L4Ps(rq, "SELECT text_val, clob_val, nclob_val, nstring_val, blob_val FROM ps_test_data WHERE id = ?");
         selectPs.setInt(1, 1);
-        var rs = selectPs.executeQuery();
+        ResultSet rs = selectPs.executeQuery();
         assertTrue(rs.next());
         assertEquals(text, rs.getString("text_val"));
         assertEquals(clobText, rs.getClob("clob_val").getSubString(1, clobText.length()));
@@ -274,14 +274,14 @@ public class L4PsTest {
 
       it("Tests L4Ps date and time with calendar", () -> {
         setupPreparedStatementTestTable(rq);
-        var insertSql = "INSERT INTO ps_test_data (date_val, time_val, ts_val) VALUES (?, ?, ?)";
-        var ps = new L4Ps(rq, insertSql);
+        String insertSql = "INSERT INTO ps_test_data (date_val, time_val, ts_val) VALUES (?, ?, ?)";
+        L4Ps ps = new L4Ps(rq, insertSql);
 
         // Set date and time with calendar
-        var utcCalendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
-        var date = Date.valueOf("2023-10-15");
-        var time = Time.valueOf("14:30:00");
-        var timestamp = Timestamp.valueOf("2023-10-15 14:30:00");
+        Calendar utcCalendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+        Date date = Date.valueOf("2023-10-15");
+        Time time = Time.valueOf("14:30:00");
+        Timestamp timestamp = Timestamp.valueOf("2023-10-15 14:30:00");
 
         ps.setDate(1, date, utcCalendar);
         ps.setTime(2, time, utcCalendar);
@@ -291,9 +291,9 @@ public class L4PsTest {
         assertEquals(1, rowsAffected);
 
         // Verify
-        var selectPs = new L4Ps(rq, "SELECT date_val, time_val, ts_val FROM ps_test_data WHERE id = ?");
+        L4Ps selectPs = new L4Ps(rq, "SELECT date_val, time_val, ts_val FROM ps_test_data WHERE id = ?");
         selectPs.setInt(1, 1);
-        var rs = selectPs.executeQuery();
+        ResultSet rs = selectPs.executeQuery();
         assertTrue(rs.next());
         assertEquals(
           L4Utc.utcOf(Date.valueOf("2023-10-15")),
@@ -309,22 +309,22 @@ public class L4PsTest {
 
       it("Tests L4Ps date and time handling around DST transitions and leap seconds", () -> {
         setupPreparedStatementTestTable(rq);
-        var insertSql = "INSERT INTO ps_test_data (date_val, time_val, ts_val) VALUES (?, ?, ?)";
-        var ps = new L4Ps(rq, insertSql);
+        String insertSql = "INSERT INTO ps_test_data (date_val, time_val, ts_val) VALUES (?, ?, ?)";
+        L4Ps ps = new L4Ps(rq, insertSql);
 
         // Test data around DST transitions (US/Eastern example: 2024 DST start on March 10, end on November 3)
         // DST start: 2024-03-10 01:59:59 (EST) -> next is 03:00:00 (EDT), skipping 02:00:00
-        var dstStartTs = Timestamp.valueOf("2024-03-10 01:59:59"); // Pre-transition
+        Timestamp dstStartTs = Timestamp.valueOf("2024-03-10 01:59:59"); // Pre-transition
 
         // DST end: 2024-11-03 01:59:59 (EDT) -> next is 01:00:00 (EST), repeating 01:00:00
-        var dstEndTs = Timestamp.valueOf("2024-11-03 01:59:59"); // Pre-transition
-        var dstEndTsPost = Timestamp.valueOf("2024-11-03 01:00:00"); // Post-transition (ambiguous hour)
+        Timestamp dstEndTs = Timestamp.valueOf("2024-11-03 01:59:59"); // Pre-transition
+        Timestamp dstEndTsPost = Timestamp.valueOf("2024-11-03 01:00:00"); // Post-transition (ambiguous hour)
 
         // Leap second example: 2016-12-31 23:59:59 -> 23:59:60 (leap second) -> 2017-01-01 00:00:00
         // Note: Java Timestamp doesn't directly support :60, so test boundary around it
-        var leapSecondTs = Timestamp.valueOf("2016-12-31 23:59:59");
-        var utcCalendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
-        var easternCalendar = Calendar.getInstance(TimeZone.getTimeZone("America/New_York"));
+        Timestamp leapSecondTs = Timestamp.valueOf("2016-12-31 23:59:59");
+        Calendar utcCalendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+        Calendar easternCalendar = Calendar.getInstance(TimeZone.getTimeZone("America/New_York"));
 
         // Insert DST start values
         ps.setDate(1, new Date(dstStartTs.getTime()), easternCalendar);
@@ -347,11 +347,11 @@ public class L4PsTest {
         ps.executeUpdate();
 
         // Verify retrieved values preserve original instants
-        var selectPs = new L4Ps(rq, "SELECT date_val, time_val, ts_val FROM ps_test_data WHERE id = ?");
+        L4Ps selectPs = new L4Ps(rq, "SELECT date_val, time_val, ts_val FROM ps_test_data WHERE id = ?");
 
         // Check DST start (id=1)
         selectPs.setInt(1, 1);
-        var rs = selectPs.executeQuery();
+        ResultSet rs = selectPs.executeQuery();
         assertTrue(rs.next());
         assertEquals(L4Utc.utcOf(new Date(dstStartTs.getTime())), L4Utc.utcOf(rs.getDate("date_val", utcCalendar)));
         assertEquals(new Time(dstStartTs.getTime()).toLocalTime(), rs.getTime("time_val", utcCalendar).toLocalTime());
@@ -393,15 +393,15 @@ public class L4PsTest {
 
       it("Tests L4Ps batch with error", () -> {
         setupPreparedStatementTestTable(rq);
-        var insertSql = "INSERT INTO ps_test_data (num_val) VALUES (?)";
-        var ps = new L4Ps(rq, insertSql);
+        String insertSql = "INSERT INTO ps_test_data (num_val) VALUES (?)";
+        L4Ps ps = new L4Ps(rq, insertSql);
 
         // Add valid batch entry
         ps.setBigDecimal(1, new BigDecimal("333.33"));
         ps.addBatch();
 
         // Add invalid batch entry (invalid syntax)
-        var invalidPs = new L4Ps(rq, "INSERT INTO nonexistent_table (num_val) VALUES (?) WHERE WHERE");
+        L4Ps invalidPs = new L4Ps(rq, "INSERT INTO nonexistent_table (num_val) VALUES (?) WHERE WHERE");
         invalidPs.setBigDecimal(1, new BigDecimal("444.44"));
         invalidPs.addBatch();
 
@@ -418,9 +418,9 @@ public class L4PsTest {
         int[] updateCounts = ps.executeBatch();
         assertArrayEquals(new int[]{1}, updateCounts);
 
-        var selectPs = new L4Ps(rq, "SELECT num_val FROM ps_test_data WHERE id = ?");
+        L4Ps selectPs = new L4Ps(rq, "SELECT num_val FROM ps_test_data WHERE id = ?");
         selectPs.setInt(1, 1);
-        var rs = selectPs.executeQuery();
+        ResultSet rs = selectPs.executeQuery();
         assertTrue(rs.next());
         assertEquals(new BigDecimal("333.33"), rs.getBigDecimal("num_val"));
         assertFalse(rs.next());
@@ -432,15 +432,15 @@ public class L4PsTest {
 
       it("Tests L4Ps closeOnCompletion and inherited methods", () -> {
         setupPreparedStatementTestTable(rq);
-        var selectSql = "SELECT * FROM ps_test_data WHERE id = ?";
-        var ps = new L4Ps(rq, selectSql);
+        String selectSql = "SELECT * FROM ps_test_data WHERE id = ?";
+        L4Ps ps = new L4Ps(rq, selectSql);
 
         // Test closeOnCompletion
         assertFalse(ps.isCloseOnCompletion());
         ps.closeOnCompletion();
         assertTrue(ps.isCloseOnCompletion());
         ps.setInt(1, 999); // Non-existent ID
-        var rs = ps.executeQuery();
+        ResultSet rs = ps.executeQuery();
         assertTrue(ps.isClosed());
 
         // Test inherited methods
@@ -459,8 +459,8 @@ public class L4PsTest {
 
       it("Tests L4Ps unsupported operations and error handling", () -> {
         setupPreparedStatementTestTable(rq);
-        var selectSql = "SELECT * FROM ps_test_data WHERE id = ?";
-        var ps = new L4Ps(rq, selectSql);
+        String selectSql = "SELECT * FROM ps_test_data WHERE id = ?";
+        L4Ps ps = new L4Ps(rq, selectSql);
 
         // Test unsupported parameter types
         try {
@@ -558,7 +558,7 @@ public class L4PsTest {
         }
 
         // Test invalid SQL execution
-        var invalidPs = new L4Ps(rq, "SELECT * FROM nonexistent_table WHERE id = ?");
+        L4Ps invalidPs = new L4Ps(rq, "SELECT * FROM nonexistent_table WHERE id = ?");
         invalidPs.setInt(1, 1);
         try {
           invalidPs.executeQuery();
@@ -568,7 +568,7 @@ public class L4PsTest {
         }
 
         // Test clearParameters
-        var ps = new L4Ps(rq, "INSERT INTO ps_test_data (num_val, text_val) VALUES (?, ?)");
+        L4Ps ps = new L4Ps(rq, "INSERT INTO ps_test_data (num_val, text_val) VALUES (?, ?)");
         ps.setBigDecimal(1, new BigDecimal("123.45"));
         ps.setString(2, "Test");
         ps.clearParameters();
@@ -578,9 +578,9 @@ public class L4PsTest {
         assertEquals(1, rowsAffected);
 
         // Verify
-        var selectPs = new L4Ps(rq, "SELECT num_val, text_val FROM ps_test_data WHERE id = ?");
+        L4Ps selectPs = new L4Ps(rq, "SELECT num_val, text_val FROM ps_test_data WHERE id = ?");
         selectPs.setInt(1, 1);
-        var rs = selectPs.executeQuery();
+        ResultSet rs = selectPs.executeQuery();
         assertTrue(rs.next());
         assertNull(rs.getBigDecimal("num_val"));
         assertNull(rs.getString("text_val"));
@@ -593,35 +593,35 @@ public class L4PsTest {
 
       it("Tests L4Ps stream, LOB, and null parameter setting methods", () -> {
         setupPreparedStatementTestTable(rq);
-        var insertSql = "INSERT INTO ps_test_data (" +
+        String insertSql = "INSERT INTO ps_test_data (" +
           "text_val, clob_val, nclob_val, nstring_val, blob_val" +
           ") VALUES (?, ?, ?, ?, ?)";
-        var ps = new L4Ps(rq, insertSql);
+        L4Ps ps = new L4Ps(rq, insertSql);
 
         // Test data
-        var unicodeText = "Unicode 世界"; // Text with non-ASCII characters
-        var asciiText = "ASCII text";
-        var charText = "Character stream text";
-        var clobText = "CLOB long content";
-        var nclobText = "NCLOB long content";
-        var nstringText = "NSTRING content";
-        var blobData = "BLOB binary data".getBytes(StandardCharsets.UTF_8);
+        String unicodeText = "Unicode 世界"; // Text with non-ASCII characters
+        String asciiText = "ASCII text";
+        String charText = "Character stream text";
+        String clobText = "CLOB long content";
+        String nclobText = "NCLOB long content";
+        String nstringText = "NSTRING content";
+        byte[] blobData = "BLOB binary data".getBytes(StandardCharsets.UTF_8);
 
         // Set parameters using the specified methods
         ps.setUnicodeStream(1, new ByteArrayInputStream(unicodeText.getBytes(StandardCharsets.UTF_16)), unicodeText.getBytes(StandardCharsets.UTF_16).length);
         ps.setClob(2, new StringReader(clobText), clobText.length());
         ps.setNClob(3, new StringReader(nclobText), nclobText.length());
         ps.setCharacterStream(4, new StringReader(nstringText), nstringText.length());
-        ps.setBlob(5, new ByteArrayInputStream(blobData), blobData.length);
+        ps.setBinaryStream(5, new ByteArrayInputStream(blobData), blobData.length);
 
         // Execute update
         int rowsAffected = ps.executeUpdate();
         assertEquals(1, rowsAffected);
 
         // Verify inserted data
-        var selectPs = new L4Ps(rq, "SELECT text_val, clob_val, nclob_val, nstring_val, blob_val FROM ps_test_data WHERE id = ?");
+        L4Ps selectPs = new L4Ps(rq, "SELECT text_val, clob_val, nclob_val, nstring_val, blob_val FROM ps_test_data WHERE id = ?");
         selectPs.setInt(1, 1);
-        var rs = selectPs.executeQuery();
+        ResultSet rs = selectPs.executeQuery();
         assertTrue(rs.next());
         assertEquals(unicodeText, rs.getString("text_val"));
         assertEquals(clobText, rs.getClob("clob_val").getSubString(1, clobText.length()));
@@ -679,7 +679,7 @@ public class L4PsTest {
         rs.close();
 
         // Test error handling for invalid streams
-        var invalidStream = new InputStream() {
+        InputStream invalidStream = new InputStream() {
           @Override public int read() throws IOException {
             throw new IOException("Read error");
           }
@@ -703,50 +703,42 @@ public class L4PsTest {
           assertEquals(SqlStateInvalidParam, e.getSQLState());
         }
 
-        var invalidReader = new Reader() {
+        // Test error handling for invalid readers
+        Reader invalidReader = new Reader() {
           @Override public int read(char[] cbuf, int off, int len) throws IOException {
             throw new IOException("Read error");
           }
-          @Override public void close() {}
+          @Override public void close() throws IOException {}
         };
         try {
-          ps.setCharacterStream(1, invalidReader, 10L);
-          fail("Expected SQLException for invalid character stream");
+          ps.setClob(1, invalidReader, 10);
+          fail("Expected SQLException for invalid Clob reader");
         } catch (SQLException e) {
           assertEquals(SqlStateInvalidParam, e.getSQLState());
         }
         try {
-          ps.setClob(1, invalidReader, 10L);
-          fail("Expected SQLException for invalid CLOB");
+          ps.setNClob(1, invalidReader, 10);
+          fail("Expected SQLException for invalid NCLOB reader");
         } catch (SQLException e) {
           assertEquals(SqlStateInvalidParam, e.getSQLState());
         }
-        try {
-          ps.setNClob(1, invalidReader, 10L);
-          fail("Expected SQLException for invalid NCLOB");
-        } catch (SQLException e) {
-          assertEquals(SqlStateInvalidParam, e.getSQLState());
-        }
-
-        ps.close();
-        selectPs.close();
       });
 
       it("Tests L4Ps setObject with target SQL type and scale/length", () -> {
         setupPreparedStatementTestTable(rq);
-        var insertSql = "INSERT INTO ps_test_data (" +
+        String insertSql = "INSERT INTO ps_test_data (" +
           "num_val, int_val, text_val, bool_val, blob_val, date_val, ts_val" +
           ") VALUES (?, ?, ?, ?, ?, ?, ?)";
-        var ps = new L4Ps(rq, insertSql);
+        L4Ps ps = new L4Ps(rq, insertSql);
 
         // Test data
-        var numericVal = new BigDecimal("123.45678");
-        var intVal = 42;
-        var textVal = "Test string";
-        var boolVal = true;
-        var blobData = "BLOB data".getBytes(StandardCharsets.UTF_8);
-        var dateVal = Date.valueOf("2023-10-15");
-        var timestampVal = Timestamp.valueOf("2023-10-15 14:30:00.0");
+        BigDecimal numericVal = new BigDecimal("123.45678");
+        int intVal = 42;
+        String textVal = "Test string";
+        boolean boolVal = true;
+        byte[] blobData = "BLOB data".getBytes(StandardCharsets.UTF_8);
+        Date dateVal = Date.valueOf("2023-10-15");
+        Timestamp timestampVal = Timestamp.valueOf("2023-10-15 14:30:00.0");
 
         // Set parameters using setObject with target SQL type and scale/length
         ps.setObject(1, numericVal, Types.NUMERIC, 2); // Scale to 2 decimal places
@@ -762,9 +754,9 @@ public class L4PsTest {
         assertEquals(1, rowsAffected);
 
         // Verify inserted data
-        var selectPs = new L4Ps(rq, "SELECT num_val, int_val, text_val, bool_val, blob_val, date_val, ts_val FROM ps_test_data WHERE id = ?");
+        L4Ps selectPs = new L4Ps(rq, "SELECT num_val, int_val, text_val, bool_val, blob_val, date_val, ts_val FROM ps_test_data WHERE id = ?");
         selectPs.setInt(1, 1);
-        var rs = selectPs.executeQuery();
+        ResultSet rs = selectPs.executeQuery();
         assertTrue(rs.next());
         assertEquals(new BigDecimal("123.46"), rs.getBigDecimal("num_val", 2)); // Rounded to 2 decimal places
         assertEquals(42, rs.getInt("int_val"));

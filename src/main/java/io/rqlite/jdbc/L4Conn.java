@@ -93,10 +93,10 @@ public class L4Conn implements Connection {
     client.stopBuffer(true, res -> {
       L4Log.debug("{} - commit result: {}", this, res);
       if (res.results != null) {
-        for (var result : res.results) {
+        for (io.rqlite.client.L4Result result : res.results) {
           if (result != null && result.error != null) {
             L4Log.trace(result.error);
-            var w = warnQuery(result.error);
+            SQLWarning w = warnQuery(result.error);
             if (this.root == null) {
               this.root = w;
             } else {

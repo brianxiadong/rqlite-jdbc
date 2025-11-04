@@ -1,14 +1,12 @@
 package io.rqlite.client;
 
-import java.net.http.HttpResponse;
-
 import static java.lang.String.format;
 
 public class L4Err {
 
-  public static HttpResponse<String> checkResponse(HttpResponse<String> res) {
+  public static L4HttpResp checkResponse(L4HttpResp res) {
     if (res.statusCode() != 200) {
-      var body = res.body();
+      String body = res.body();
       throw new IllegalStateException(format(
         "HTTP response error: [%d]%s", res.statusCode(),
         body != null ? format(" - %s", body) : ""

@@ -66,13 +66,13 @@ public class L4RsMeta implements ResultSetMetaData {
 
   @Override public boolean isSigned(int column) throws SQLException {
     checkColumn(column, result);
-    var type = result.types.get(column - 1);
+    String type = result.types.get(column - 1);
     return getJdbcTypeSigned(type);
   }
 
   @Override public int getColumnDisplaySize(int column) throws SQLException {
     checkColumn(column, result);
-    var type = result.types.get(column - 1);
+    String type = result.types.get(column - 1);
     if (type == null || RQ_NULL.equalsIgnoreCase(type)) {
       return 4; // "NULL"
     }
@@ -121,12 +121,12 @@ public class L4RsMeta implements ResultSetMetaData {
 
   @Override public int getColumnType(int column) throws SQLException {
     checkColumn(column, result);
-    var type = result.types.get(column - 1);
+    String type = result.types.get(column - 1);
     if (type == null) {
       return Types.NULL; // Handle NULL columns or missing type info
     }
-    var typeUpper = type.toUpperCase();
-    var jt = getJdbcType(typeUpper);
+    String typeUpper = type.toUpperCase();
+    int jt = getJdbcType(typeUpper);
     if (jt == -1) {
       throw badRqLiteColumn(column, type);
     }
@@ -136,7 +136,7 @@ public class L4RsMeta implements ResultSetMetaData {
   /* Return native type name */
   @Override public String getColumnTypeName(int column) throws SQLException {
     checkColumn(column, result);
-    var type = result.types.get(column - 1);
+    String type = result.types.get(column - 1);
     return type != null ? type : "";
   }
 
@@ -160,7 +160,7 @@ public class L4RsMeta implements ResultSetMetaData {
 
   @Override public String getColumnClassName(int column) throws SQLException {
     checkColumn(column, result);
-    var type = result.types.get(column - 1);
+    String type = result.types.get(column - 1);
     if (type == null || RQ_NULL.equalsIgnoreCase(type)) {
       return Object.class.getCanonicalName(); // For NULL columns
     }

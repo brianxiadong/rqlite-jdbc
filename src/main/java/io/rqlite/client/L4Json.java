@@ -9,18 +9,18 @@ import java.util.*;
 public class L4Json {
 
   public static List<String> toStringList(JsonArray array) {
-    var list = new ArrayList<String>();
-    for (var value : array) {
+    List<String> list = new ArrayList<String>();
+    for (JsonValue value : array) {
       list.add(value.asString());
     }
     return list;
   }
 
   public static List<List<String>> toValuesList(JsonArray valuesArray) {
-    var values = new ArrayList<List<String>>();
-    for (var rowValue : valuesArray) {
-      var row = rowValue.asArray();
-      var rowValues = new ArrayList<String>();
+    List<List<String>> values = new ArrayList<List<String>>();
+    for (JsonValue rowValue : valuesArray) {
+      JsonArray row = rowValue.asArray();
+      List<String> rowValues = new ArrayList<String>();
       for (int i = 0; i < row.size(); i++) {
         if (row.get(i).isString()) {
           rowValues.add(row.get(i).asString());

@@ -84,20 +84,20 @@ public class L4Db {
       return false;
     }
     // Convert SQL LIKE pattern to regex (e.g., % -> .*, _ -> .)
-    var regex = pattern.replace("%", ".*").replace("_", ".");
+    String regex = pattern.replace("%", ".*").replace("_", ".");
     return Pattern.compile(regex, Pattern.CASE_INSENSITIVE).matcher(value).matches();
   }
 
   public static L4Result dbGetCatalogs(L4Client client) {
-    var res = checkResult(client.querySingle("SELECT * from (SELECT NULL TABLE_CAT) WHERE 1 = 0").first());
-    var out = res.setTypes(RQ_VARCHAR);
+    L4Result res = checkResult(client.querySingle("SELECT * from (SELECT NULL TABLE_CAT) WHERE 1 = 0").first());
+    L4Result out = res.setTypes(RQ_VARCHAR);
     out.addRow(Main);
     return out;
   }
 
   public static L4Result dbGetTables(String tableNamePattern, String[] types, L4Client client) {
-    var typeSet = types == null ? new HashSet<>(Arrays.asList(TABLE, VIEW)) : new HashSet<>(Arrays.asList(types));
-    var typeFilter = "";
+    Set<String> typeSet = types == null ? new HashSet<String>(Arrays.asList(TABLE, VIEW)) : new HashSet<String>(Arrays.asList(types));
+    String typeFilter = "";
     if (!typeSet.contains(TABLE) && typeSet.contains(VIEW)) {
       typeFilter = " WHERE type = 'view'";
     } else if (typeSet.contains(TABLE) && !typeSet.contains(VIEW)) {
@@ -105,7 +105,7 @@ public class L4Db {
     } else {
       typeFilter = "WHERE (type = 'table' OR type = 'view')";
     }
-    var sql = join("\n", "",
+    String sql = join("\n", "",
       "SELECT ",
       "  NULL AS TABLE_CAT, NULL AS TABLE_SCHEM, name AS TABLE_NAME, ",
       "  type AS TABLE_TYPE, NULL AS REMARKS, NULL AS TYPE_CAT, NULL AS TYPE_SCHEM, ",
@@ -116,7 +116,7 @@ public class L4Db {
     );
     tableNamePattern = tableNamePattern == null ? "%" : quote(tableNamePattern);
     sql = format(sql, typeFilter, tableNamePattern);
-    var res = client.querySingle(sql).first().setTypes(
+    L4Result res = client.querySingle(sql).first().setTypes(
       RQ_VARCHAR, RQ_VARCHAR, RQ_VARCHAR,
       RQ_VARCHAR, RQ_VARCHAR, RQ_VARCHAR, RQ_VARCHAR,
       RQ_VARCHAR, RQ_VARCHAR, RQ_VARCHAR
@@ -126,10 +126,10 @@ public class L4Db {
   }
 
   public static List<String> dbUserTables(L4Client client) {
-    var out = new ArrayList<String>();
-    var trs = dbGetTables(All, new String[] { TABLE }, client);
+    List<String> out = new ArrayList<String>();
+    L4Result trs = dbGetTables(All, new String[] { TABLE }, client);
     trs.forEach((i, row) -> {
-      var table = trs.get(TABLE_NAME, row);
+      String table = trs.get(TABLE_NAME, row);
       if (!table.startsWith("sqlite")) {
         out.add(table);
       }
@@ -145,7 +145,7 @@ public class L4Db {
   }
 
   public static L4Result dbGetColumns(String tableNamePattern, String columnNamePattern, L4Client client) {
-    var out = client.querySingle(join("\n", "",
+    L4Result out = client.querySingle(join("\n", "",
       "SELECT * FROM (",
       "  SELECT NULL AS TABLE_CAT, NULL AS TABLE_SCHEM, NULL AS TABLE_NAME, ",
       "         NULL COLUMN_NAME, 0 AS DATA_TYPE, NULL TYPE_NAME, 0 AS COLUMN_SIZE, ",
@@ -165,24 +165,24 @@ public class L4Db {
     );
 
     // Get all tables matching tableNamePattern
-    var tables = dbGetTables(tableNamePattern, new String[] {TABLE, VIEW}, client);
+    L4Result tables = dbGetTables(tableNamePattern, new String[] {TABLE, VIEW}, client);
 
     tables.forEach((i, row) -> {
-      var tableName = out.get(TABLE_NAME, row);
-      var res0 = client.querySingle(format("PRAGMA table_info('%s')", quote(tableName))).first();
+      String tableName = out.get(TABLE_NAME, row);
+      L4Result res0 = client.querySingle(format("PRAGMA table_info('%s')", quote(tableName))).first();
       res0.forEach((j, row0) -> {
-        var ordinal = j + 1;
-        var colName = res0.get(kName, row0);
+        int ordinal = j + 1;
+        String colName = res0.get(kName, row0);
         if (matchesPattern(colName, columnNamePattern)) {
-          var type = res0.get(kType, row0);
-          var notNull = atoi(res0.get(kNotNull, row0));
-          var defaultValue = res0.get(kDfltValue, row0);
-          var pk = atoi(res0.get(kPk, row0));
-          var isAutoIncrement = pk == 1 && type.contains(RQ_INTEGER) && defaultValue != null && defaultValue.equalsIgnoreCase(kNull);
-          var sqlType = getJdbcType(type);
-          var columnSize = getJdbcTypePrecision(type);
-          var decimalDigits = 0;
-          var nullable = notNull == 1 ? DatabaseMetaData.columnNoNulls : DatabaseMetaData.columnNullable;
+          String type = res0.get(kType, row0);
+          int notNull = atoi(res0.get(kNotNull, row0));
+          String defaultValue = res0.get(kDfltValue, row0);
+          int pk = atoi(res0.get(kPk, row0));
+          boolean isAutoIncrement = pk == 1 && type.contains(RQ_INTEGER) && defaultValue != null && defaultValue.equalsIgnoreCase(kNull);
+          int sqlType = getJdbcType(type);
+          int columnSize = getJdbcTypePrecision(type);
+          int decimalDigits = 0;
+          int nullable = notNull == 1 ? DatabaseMetaData.columnNoNulls : DatabaseMetaData.columnNullable;
           out.addRow(Main,
             null, tableName, colName, itoa(sqlType), type,
             itoa(columnSize), itoa(0), itoa(decimalDigits), itoa(10),
@@ -209,7 +209,7 @@ public class L4Db {
   }
 
   public static L4Result dbGetPrimaryKeys(String tablePattern, L4Client client) {
-    var out = client.querySingle(join("\n", "",
+    L4Result out = client.querySingle(join("\n", "",
       "SELECT * FROM (",
       "  SELECT NULL AS TABLE_CAT, NULL AS TABLE_SCHEM, ",
       "         NULL AS TABLE_NAME, NULL AS COLUMN_NAME, 0 AS KEY_SEQ, NULL AS PK_NAME",
@@ -218,13 +218,13 @@ public class L4Db {
       RQ_VARCHAR, RQ_VARCHAR, RQ_VARCHAR,
       RQ_VARCHAR, RQ_INTEGER, RQ_VARCHAR
     );
-    var tables = tablePattern.equals(All) ? dbUserTables(client) : List.of(tablePattern);
-    for (var table : tables) {
-      var tab = quote(table);
-      var res = client.querySingle(format("PRAGMA table_info('%s')", tab)).first();
-      final var keySeq = new int[] { 1 };
+    List<String> tables = tablePattern.equals(All) ? dbUserTables(client) : Collections.singletonList(tablePattern);
+    for (String table : tables) {
+      String tab = quote(table);
+      L4Result res = client.querySingle(format("PRAGMA table_info('%s')", tab)).first();
+      final int[] keySeq = new int[] { 1 };
       res.forEach((i, row) -> {
-        var pk = atoi(res.get(kPk, row));
+        int pk = atoi(res.get(kPk, row));
         if (pk == 1) {
           out.addRow(
             Main, null, tab, res.get(kName, row),
@@ -239,7 +239,7 @@ public class L4Db {
 
   public static L4Result dbGetBestRowIdentifier(String table, boolean nullable, L4Client client) {
     // Use primary key columns as best row identifier
-    var out = client.querySingle(join("\n", "",
+    L4Result out = client.querySingle(join("\n", "",
       "SELECT * FROM (",
       "  SELECT 0 AS SCOPE, NULL AS COLUMN_NAME, ",
       "         0 AS DATA_TYPE, NULL AS TYPE_NAME, 0 AS COLUMN_SIZE, ",
@@ -250,13 +250,13 @@ public class L4Db {
       RQ_VARCHAR, RQ_INTEGER, RQ_INTEGER,
       RQ_INTEGER, RQ_INTEGER
     );
-    var pkRs = dbGetPrimaryKeys(table, client);
+    L4Result pkRs = dbGetPrimaryKeys(table, client);
     pkRs.forEach((i, pkr) -> {
-      var colName = pkRs.get(COLUMN_NAME, pkr);
-      var colRs = dbGetColumns(table, colName, client);
+      String colName = pkRs.get(COLUMN_NAME, pkr);
+      L4Result colRs = dbGetColumns(table, colName, client);
       colRs.forEach((j, cr) -> {
-        var nFlag = colRs.get(NULLABLE, cr);
-        var nfi = nFlag != null ? Integer.parseInt(nFlag) : -1;
+        String nFlag = colRs.get(NULLABLE, cr);
+        int nfi = nFlag != null ? Integer.parseInt(nFlag) : -1;
         if (!nullable || nfi == DatabaseMetaData.columnNoNulls) {
           out.addRow(
             itoa(DatabaseMetaData.bestRowSession),
@@ -272,7 +272,7 @@ public class L4Db {
   }
 
   public static L4Result dbGetImportedKeys(String tablePattern, L4Client client) {
-    var out = client.querySingle(join("\n", "",
+    L4Result out = client.querySingle(join("\n", "",
       "SELECT * FROM (",
       "  SELECT NULL AS PKTABLE_CAT, NULL AS PKTABLE_SCHEM, NULL AS PKTABLE_NAME, NULL AS PKCOLUMN_NAME, ",
       "         NULL AS FKTABLE_CAT, NULL AS FKTABLE_SCHEM, NULL AS FKTABLE_NAME, NULL AS FKCOLUMN_NAME, ",
@@ -285,18 +285,18 @@ public class L4Db {
       RQ_INTEGER, RQ_INTEGER, RQ_INTEGER,
       RQ_VARCHAR, RQ_VARCHAR, RQ_INTEGER
     );
-    var tables = tablePattern.equals(All) ? dbUserTables(client) : List.of(tablePattern);
-    for (var table : tables) {
-      var fkTable = quote(table);
-      var rs = client.querySingle(format("PRAGMA foreign_key_list('%s')", fkTable)).first();
+    List<String> tables = tablePattern.equals(All) ? dbUserTables(client) : Collections.singletonList(tablePattern);
+    for (String table : tables) {
+      String fkTable = quote(table);
+      L4Result rs = client.querySingle(format("PRAGMA foreign_key_list('%s')", fkTable)).first();
       rs.forEach((i, row) -> {
-        var seq = Integer.toString(Integer.parseInt(rs.get(kSeq, row)) + 1);
-        var fkCol = rs.get(kFrom, row);
-        var pkCol = rs.get(kTo, row);
-        var pkTable = rs.get(kTable, row);
-        var onDelete = rs.get(kOnDelete, row);
-        var updateRule = itoa(DatabaseMetaData.importedKeyNoAction);
-        var deleteRule = itoa(
+        String seq = Integer.toString(Integer.parseInt(rs.get(kSeq, row)) + 1);
+        String fkCol = rs.get(kFrom, row);
+        String pkCol = rs.get(kTo, row);
+        String pkTable = rs.get(kTable, row);
+        String onDelete = rs.get(kOnDelete, row);
+        String updateRule = itoa(DatabaseMetaData.importedKeyNoAction);
+        String deleteRule = itoa(
           onDelete != null && onDelete.equals(CASCADE)
             ? DatabaseMetaData.importedKeyCascade
             : DatabaseMetaData.importedKeyNoAction
@@ -315,7 +315,7 @@ public class L4Db {
   }
 
   public static L4Result dbGetExportedKeys(String table, L4Client client) {
-    var out = client.querySingle(join("\n", "",
+    L4Result out = client.querySingle(join("\n", "",
       "SELECT * FROM (",
       "  SELECT NULL AS PKTABLE_CAT, NULL AS PKTABLE_SCHEM, NULL AS PKTABLE_NAME, NULL AS PKCOLUMN_NAME, ",
       "         NULL AS FKTABLE_CAT, NULL AS FKTABLE_SCHEM, NULL AS FKTABLE_NAME, NULL AS FKCOLUMN_NAME, ",
@@ -329,18 +329,18 @@ public class L4Db {
       RQ_VARCHAR, RQ_VARCHAR, RQ_INTEGER
     );
     // Find all tables with foreign keys referencing this table
-    var tables = dbGetTables(null, new String[] { TABLE }, client);
+    L4Result tables = dbGetTables(null, new String[] { TABLE }, client);
     tables.forEach((i, row) -> {
-      var fkTable = quote(tables.get(TABLE_NAME, row));
-      var fkRs = client.querySingle(format("PRAGMA foreign_key_list('%s')", fkTable)).first();
+      String fkTable = quote(tables.get(TABLE_NAME, row));
+      L4Result fkRs = client.querySingle(format("PRAGMA foreign_key_list('%s')", fkTable)).first();
       fkRs.forEach((j, row0) -> {
         if (table.equals(fkRs.get(kTable, row0))) {
-          var seq = itoa(atoi(fkRs.get(kSeq, row0)) + 1);
-          var fkCol = fkRs.get(kFrom, row0);
-          var pkCol = fkRs.get(kTo, row0);
-          var onDelete = fkRs.get(kOnDelete, row0);
-          var updateRule = itoa(DatabaseMetaData.importedKeyNoAction);
-          var deleteRule = itoa(
+          String seq = itoa(atoi(fkRs.get(kSeq, row0)) + 1);
+          String fkCol = fkRs.get(kFrom, row0);
+          String pkCol = fkRs.get(kTo, row0);
+          String onDelete = fkRs.get(kOnDelete, row0);
+          String updateRule = itoa(DatabaseMetaData.importedKeyNoAction);
+          String deleteRule = itoa(
             onDelete != null && onDelete.equals(CASCADE)
               ? DatabaseMetaData.importedKeyCascade
               : DatabaseMetaData.importedKeyNoAction
@@ -360,7 +360,7 @@ public class L4Db {
   }
 
   public static L4Result dbGetCrossReference(String parentTable, String foreignTable, L4Client client) {
-    var out = client.querySingle(join("\n", "",
+    L4Result out = client.querySingle(join("\n", "",
       "SELECT * FROM (",
       "  SELECT NULL AS PKTABLE_CAT, NULL AS PKTABLE_SCHEM, NULL AS PKTABLE_NAME, NULL AS PKCOLUMN_NAME, ",
       "         NULL AS FKTABLE_CAT, NULL AS FKTABLE_SCHEM, NULL AS FKTABLE_NAME, NULL AS FKCOLUMN_NAME, ",
@@ -373,9 +373,9 @@ public class L4Db {
       RQ_SMALLINT, RQ_SMALLINT, RQ_SMALLINT,
       RQ_VARCHAR, RQ_VARCHAR, RQ_SMALLINT
     );
-    var fkRs = dbGetImportedKeys(foreignTable, client);
+    L4Result fkRs = dbGetImportedKeys(foreignTable, client);
     fkRs.forEach((i, row) -> {
-      var pkTable = fkRs.get(PKTABLE_NAME, row);
+      String pkTable = fkRs.get(PKTABLE_NAME, row);
       if (parentTable.equals(pkTable)) {
         out.addRow(
           Main, null, pkTable, fkRs.get(PKCOLUMN_NAME, row),
@@ -393,7 +393,7 @@ public class L4Db {
   }
 
   public static L4Result dbGetTypeInfo(L4Client client) {
-    var out = client.querySingle(join("\n", "",
+    L4Result out = client.querySingle(join("\n", "",
       "SELECT * FROM (",
       "  SELECT NULL AS TYPE_NAME, 0 AS DATA_TYPE, 0 AS PRECISION, ",
       "         NULL AS LITERAL_PREFIX, NULL AS LITERAL_SUFFIX, ",
@@ -412,9 +412,9 @@ public class L4Db {
       RQ_SMALLINT, RQ_INTEGER, RQ_INTEGER,
       RQ_INTEGER
     );
-    for (var rqt : RQ_TYPES) {
-      var jt = getJdbcType(rqt);
-      var hasPrefix = anyOf(jt, Types.VARCHAR, Types.DATE, Types.TIME, Types.TIMESTAMP, Types.DATALINK, Types.NVARCHAR);
+    for (String rqt : RQ_TYPES) {
+      int jt = getJdbcType(rqt);
+      boolean hasPrefix = anyOf(jt, Types.VARCHAR, Types.DATE, Types.TIME, Types.TIMESTAMP, Types.DATALINK, Types.NVARCHAR);
       out.addRow(
         rqt, itoa(jt), itoa(getJdbcTypePrecision(rqt)),
         hasPrefix ? "'" : null, hasPrefix ? "'" : null,
@@ -429,7 +429,7 @@ public class L4Db {
   }
 
   public static L4Result dbGetIndexInfo(String tablePattern, boolean unique, L4Client client) {
-    var out = client.querySingle(join("\n", "",
+    L4Result out = client.querySingle(join("\n", "",
       "SELECT * FROM (",
       "  SELECT NULL AS TABLE_CAT, NULL AS TABLE_SCHEM, NULL AS TABLE_NAME, ",
       "         FALSE AS NON_UNIQUE, NULL AS INDEX_QUALIFIER, NULL AS INDEX_NAME, 0 AS TYPE, ",
@@ -442,13 +442,13 @@ public class L4Db {
       RQ_INTEGER, RQ_VARCHAR, RQ_VARCHAR, RQ_BIGINT,
       RQ_BIGINT, RQ_VARCHAR
     );
-    var tables = tablePattern.equals(All) ? dbUserTables(client) : List.of(tablePattern);
-    for (var table : tables) {
-      var seq = new int[] { 1 };
-      var ti = client.querySingle(format("PRAGMA table_info('%s')", quote(table))).first();
+    List<String> tables = tablePattern.equals(All) ? dbUserTables(client) : Collections.singletonList(tablePattern);
+    for (String table : tables) {
+      int[] seq = new int[] { 1 };
+      L4Result ti = client.querySingle(format("PRAGMA table_info('%s')", quote(table))).first();
       ti.forEach((i, row) -> {
-        var colName = ti.get(kName, row);
-        var isPk = atoi(ti.get(kPk, row)) == 1;
+        String colName = ti.get(kName, row);
+        boolean isPk = atoi(ti.get(kPk, row)) == 1;
         if (isPk) {
           out.addRow(
             Main, null, table,
@@ -458,17 +458,17 @@ public class L4Db {
           );
         }
       });
-      var rs = client.querySingle(format("PRAGMA index_list('%s')", quote(table))).first();
+      L4Result rs = client.querySingle(format("PRAGMA index_list('%s')", quote(table))).first();
       rs.forEach((i, row) -> {
-        var indexName = rs.get(kName, row);
-        var isUnique = atoi(rs.get(kUnique, row)) == 1;
-        var iexInfo = client.querySingle(format("PRAGMA index_xinfo('%s')", quote(indexName))).first();
+        String indexName = rs.get(kName, row);
+        boolean isUnique = atoi(rs.get(kUnique, row)) == 1;
+        L4Result iexInfo = client.querySingle(format("PRAGMA index_xinfo('%s')", quote(indexName))).first();
         iexInfo.forEach((j, row0) -> {
-          var skip = unique && !isUnique;
+          boolean skip = unique && !isUnique;
           if (!skip && (atoi(iexInfo.get(kCid, row0)) != -1)) {
-            var colName = iexInfo.get(kName, row0);
-            var colSort = new String[1];
-            var desc = atob(iexInfo.get(kDesc, row0));
+            String colName = iexInfo.get(kName, row0);
+            String[] colSort = new String[1];
+            boolean desc = atob(iexInfo.get(kDesc, row0));
             colSort[0] = desc ? "D" : "A";
             out.addRow(
               Main, null, table,

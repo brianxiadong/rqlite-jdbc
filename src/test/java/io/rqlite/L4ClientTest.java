@@ -1,6 +1,8 @@
 package io.rqlite;
 
 import io.rqlite.client.L4Statement;
+import io.rqlite.client.L4Client;
+import io.rqlite.client.L4Response;
 import j8spec.annotation.DefinedOrder;
 import j8spec.junit.J8SpecRunner;
 import org.junit.runner.RunWith;
@@ -15,13 +17,13 @@ public class L4ClientTest {
   static {
     if (L4Tests.runIntegrationTests) {
       it("Interacts with an Rqlite instance", () -> {
-        var rq = L4Tests.localClient();
+        L4Client rq = L4Tests.localClient();
 
         System.out.println(rq.status().toString());
         System.out.println(rq.nodes().toString());
         System.out.println(rq.ready());
 
-        var res0 = rq.executeSingle(join("\n", "",
+        L4Response res0 = rq.executeSingle(join("\n", "",
           "CREATE TABLE IF NOT EXISTS users (",
           "  id INTEGER PRIMARY KEY AUTOINCREMENT,",
           "  name TEXT NOT NULL,",
@@ -32,15 +34,15 @@ public class L4ClientTest {
         assertEquals(200, res0.statusCode);
         res0.print(System.out);
 
-        var res1 = rq.querySingle("SELECT * FROM users");
+        L4Response res1 = rq.querySingle("SELECT * FROM users");
         assertEquals(200, res1.statusCode);
         res1.print(System.out);
 
         if (res1.results != null) {
-          var rl = res1.results;
-          var vals = rl.get(0).values;
+          java.util.List<io.rqlite.client.L4Result> rl = res1.results;
+          java.util.List<java.util.List<String>> vals = rl.get(0).values;
           if (vals == null || vals.isEmpty()) {
-            var res2 = rq.execute(
+            L4Response res2 = rq.execute(
               true,
               new L4Statement().sql("INSERT INTO users (name, email, age) VALUES ('Alice', 'alice@example.com', 30)"),
               new L4Statement().sql("INSERT INTO users (name, email, age) VALUES ('Bob', 'bob@example.com', 25)"),
@@ -50,7 +52,7 @@ public class L4ClientTest {
           }
         }
 
-        var res3 = rq.querySingle("SELECT * FROM users WHERE age > ?", 30);
+        L4Response res3 = rq.querySingle("SELECT * FROM users WHERE age > ?", 30);
         assertEquals(200, res3.statusCode);
         res3.print(System.out);
       });

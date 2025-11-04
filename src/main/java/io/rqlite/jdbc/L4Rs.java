@@ -70,7 +70,7 @@ public class L4Rs implements ResultSet {
     checkClosed();
     checkRow(currentRow, result, isClosed);
     checkColumn(columnIndex, result);
-    var value = result.values.get(currentRow).get(columnIndex - 1);
+    String value = result.values.get(currentRow).get(columnIndex - 1);
     wasNull = (value == null || value.equals("null"));
     if (wasNull) {
       return null;
@@ -97,37 +97,37 @@ public class L4Rs implements ResultSet {
   }
 
   @Override public boolean getBoolean(int columnIndex) throws SQLException {
-    var value = tryCast(columnIndex, Types.BOOLEAN);
+    Object value = tryCast(columnIndex, Types.BOOLEAN);
     return value != null ? (Boolean) value : false;
   }
 
   @Override public byte getByte(int columnIndex) throws SQLException {
-    var value = tryCast(columnIndex, Types.TINYINT);
+    Object value = tryCast(columnIndex, Types.TINYINT);
     return value != null ? (Byte) value : 0;
   }
 
   @Override public short getShort(int columnIndex) throws SQLException {
-    var value = tryCast(columnIndex, Types.SMALLINT);
+    Object value = tryCast(columnIndex, Types.SMALLINT);
     return value != null ? (Short) value : 0;
   }
 
   @Override public int getInt(int columnIndex) throws SQLException {
-    var value = tryCast(columnIndex, Types.INTEGER);
+    Object value = tryCast(columnIndex, Types.INTEGER);
     return value != null ? (Integer) value : 0;
   }
 
   @Override public long getLong(int columnIndex) throws SQLException {
-    var value = tryCast(columnIndex, Types.BIGINT);
+    Object value = tryCast(columnIndex, Types.BIGINT);
     return value != null ? (Long) value : 0L;
   }
 
   @Override public float getFloat(int columnIndex) throws SQLException {
-    var value = tryCast(columnIndex, Types.FLOAT);
+    Object value = tryCast(columnIndex, Types.FLOAT);
     return value != null ? (Float) value : 0.0f;
   }
 
   @Override public double getDouble(int columnIndex) throws SQLException {
-    var value = tryCast(columnIndex, Types.DOUBLE);
+    Object value = tryCast(columnIndex, Types.DOUBLE);
     return value != null ? (Double) value : 0.0;
   }
 
@@ -227,6 +227,8 @@ public class L4Rs implements ResultSet {
     return getBinaryStream(findColumn(columnLabel));
   }
 
+
+
   @Override public SQLWarning getWarnings() throws SQLException {
     checkClosed();
     if (result.error != null) {
@@ -251,7 +253,7 @@ public class L4Rs implements ResultSet {
   }
 
   @Override public Object getObject(int columnIndex) throws SQLException {
-    var targetJdbcType = meta.getColumnType(columnIndex);
+    int targetJdbcType = meta.getColumnType(columnIndex);
     return tryCast(columnIndex, targetJdbcType);
   }
 
@@ -460,7 +462,7 @@ public class L4Rs implements ResultSet {
   }
 
   @Override public Object getObject(int columnIndex, Map<String, Class<?>> map) throws SQLException {
-    var typeName = meta.getColumnTypeName(columnIndex);
+    String typeName = meta.getColumnTypeName(columnIndex);
     if (map != null && map.containsKey(typeName)) {
       throw notSupported(format("Custom type mapping for %s in SQLite", typeName));
     }
@@ -472,11 +474,11 @@ public class L4Rs implements ResultSet {
   }
 
   @Override public Blob getBlob(int columnIndex) throws SQLException {
-    var bytes = (byte[]) tryCast(columnIndex, Types.BLOB);
+    byte[] bytes = (byte[]) tryCast(columnIndex, Types.BLOB);
     if (bytes == null) {
       return null;
     }
-    var blob = new L4Blob();
+    L4Blob blob = new L4Blob();
     blob.setBytes(1, bytes);
     return blob;
   }

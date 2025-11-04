@@ -14,7 +14,7 @@ public class L4Utc {
   public static final TimeZone UtcTz = TimeZone.getTimeZone("UTC");
 
   public static LocalDate utcOf(Date x) {
-    var calInstance = Calendar.getInstance(UtcTz);
+    Calendar calInstance = Calendar.getInstance(UtcTz);
     calInstance.setTimeInMillis(x.getTime());
     return LocalDate.of(
       calInstance.get(Calendar.YEAR),
@@ -24,7 +24,7 @@ public class L4Utc {
   }
 
   public static LocalTime utcOf(Time x) {
-    var calInstance = Calendar.getInstance(UtcTz);
+    Calendar calInstance = Calendar.getInstance(UtcTz);
     calInstance.setTimeInMillis(x.getTime());
     return LocalTime.of(
       calInstance.get(Calendar.HOUR_OF_DAY),
@@ -34,13 +34,13 @@ public class L4Utc {
   }
 
   public static LocalDateTime utcDateTimeOf(Timestamp x) {
-    var instant = x.toInstant();
-    var zdt = instant.atZone(UtcZid);
+    Instant instant = x.toInstant();
+    ZonedDateTime zdt = instant.atZone(UtcZid);
     return zdt.toLocalDateTime();
   }
 
   public static String utcFmtOf(Timestamp x) {
-    var formatter = new DateTimeFormatterBuilder()
+    java.time.format.DateTimeFormatter formatter = new DateTimeFormatterBuilder()
       .appendPattern("yyyy-MM-dd HH:mm:ss")
       .optionalStart()
       .appendFraction(ChronoField.NANO_OF_SECOND, 0, 9, true) // Adds .nnnnnnnnn if nanos > 0

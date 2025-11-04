@@ -28,7 +28,7 @@ public class L4JdbcTest {
   // Helper to read InputStream content
   private static String readStream(InputStream is, String charset) throws Exception {
     if (is == null) return null;
-    try (var baos = new ByteArrayOutputStream()) {
+    try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
       byte[] buffer = new byte[1024];
       int len;
       while ((len = is.read(buffer)) != -1) {
@@ -41,7 +41,7 @@ public class L4JdbcTest {
   // Helper to read Reader content
   private static String readReader(Reader reader) throws Exception {
     if (reader == null) return null;
-    try (var sw = new StringWriter()) {
+    try (StringWriter sw = new StringWriter()) {
       char[] buffer = new char[1024];
       int len;
       while ((len = reader.read(buffer)) != -1) {
@@ -63,7 +63,7 @@ public class L4JdbcTest {
 
   // Helper to create a mock L4Result
   private static L4Result createMockResult(List<String> columns, List<String> types, List<List<String>> values) {
-    var result = new L4Result(Json.object());
+    L4Result result = new L4Result(Json.object());
     result.columns = new ArrayList<>(columns);
     result.types = new ArrayList<>(types);
     result.values = new ArrayList<>(values);
@@ -73,7 +73,7 @@ public class L4JdbcTest {
   static {
     it("Tests L4Jdbc utility methods", () -> {
       // Mock L4Result
-      var result = createMockResult(
+      L4Result result = createMockResult(
         Arrays.asList("id", "name"),
         Arrays.asList(RQ_INTEGER, RQ_VARCHAR),
         Arrays.asList(Arrays.asList("1", "Alice"), Arrays.asList("2", "Bob"))
@@ -291,7 +291,7 @@ public class L4JdbcTest {
 
     it("Tests L4Jdbc URL conversion", () -> {
       int colIdx = 1;
-      var expectedUrl = new URI("https://example.com").toURL();
+      URL expectedUrl = new URI("https://example.com").toURL();
       assertEquals(expectedUrl, castURL("https://example.com", colIdx, Types.DATALINK));
       assertEquals(expectedUrl, castURL("https://example.com", colIdx, Types.VARCHAR));
       runFail(() -> castURL("invalid-url", colIdx, Types.DATALINK), SqlStateInvalidType);
@@ -393,17 +393,17 @@ public class L4JdbcTest {
       runFail(() -> convertValue("invalid-base64", Types.BLOB, Types.BLOB, colIdx, -1, null, null), SqlStateInvalidType);
 
       // DATE
-      var expectedDate = new Date(LocalDate.of(2023, 10, 15).atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli());
+      Date expectedDate = new Date(LocalDate.of(2023, 10, 15).atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli());
       assertEquals(expectedDate, convertValue("2023-10-15", Types.DATE, Types.DATE, colIdx, -1, utcCal, null));
       runFail(() -> convertValue("invalid-date", Types.DATE, Types.DATE, colIdx, -1, utcCal, null), SqlStateInvalidType);
 
       // TIME
-      var expectedTime = Time.valueOf(LocalTime.of(14, 30));
+      Time expectedTime = Time.valueOf(LocalTime.of(14, 30));
       assertEquals(expectedTime, convertValue("14:30:00", Types.TIME, Types.TIME, colIdx, -1, null, null));
       runFail(() -> convertValue("invalid-time", Types.TIME, Types.TIME, colIdx, -1, null, null), SqlStateInvalidType);
 
       // TIMESTAMP
-      var expectedTs = new Timestamp(
+      Timestamp expectedTs = new Timestamp(
         LocalDateTime.of(2023, 10, 15, 14, 30).atZone(ZoneId.of("UTC")).toInstant().toEpochMilli()
       );
       assertEquals(expectedTs, convertValue("2023-10-15 14:30:00", Types.TIMESTAMP, Types.TIMESTAMP, colIdx, -1, utcCal, null));
@@ -426,12 +426,12 @@ public class L4JdbcTest {
       runFail(() -> convertValue(value, Types.BLOB, CHARACTER_STREAM, colIdx, -1, null, null), SqlStateInvalidConversion);
 
       // CLOB_STREAM
-      var clob = (Clob) convertValue(value, Types.CLOB, CLOB_STREAM, colIdx, -1, null, null);
+      Clob clob = (Clob) convertValue(value, Types.CLOB, CLOB_STREAM, colIdx, -1, null, null);
       assertEquals(value, clob.getSubString(1, value.length()));
       runFail(() -> convertValue(value, Types.BLOB, CLOB_STREAM, colIdx, -1, null, null), SqlStateInvalidConversion);
 
       // NCLOB_STREAM
-      var nclob = (NClob) convertValue(value, Types.NCLOB, NCLOB_STREAM, colIdx, -1, null, null);
+      NClob nclob = (NClob) convertValue(value, Types.NCLOB, NCLOB_STREAM, colIdx, -1, null, null);
       assertEquals(value, nclob.getSubString(1, value.length()));
       runFail(() -> convertValue(value, Types.BLOB, NCLOB_STREAM, colIdx, -1, null, null), SqlStateInvalidConversion);
 
@@ -440,7 +440,7 @@ public class L4JdbcTest {
       runFail(() -> convertValue(value, Types.BLOB, NCHARACTER_STREAM, colIdx, -1, null, null), SqlStateInvalidConversion);
 
       // URL_STREAM
-      var expectedUrl = new URI("https://example.com").toURL();
+      URL expectedUrl = new URI("https://example.com").toURL();
       assertEquals(expectedUrl, convertValue("https://example.com", Types.DATALINK, URL_STREAM, colIdx, -1, null, null));
       runFail(() -> convertValue("invalid-url", Types.DATALINK, URL_STREAM, colIdx, -1, null, null), SqlStateInvalidType);
 
@@ -479,43 +479,43 @@ public class L4JdbcTest {
 
     it("Tests split method", () -> {
       // Test single statement
-      var sql1 = "SELECT * FROM table";
-      var result1 = split(sql1);
+      String sql1 = "SELECT * FROM table";
+      io.rqlite.client.L4Statement[] result1 = split(sql1);
       assertEquals(1, result1.length);
       assertEquals("SELECT * FROM table", result1[0].sql);
 
       // Test multiple statements
-      var sql2 = "SELECT * FROM table1; SELECT * FROM table2";
-      var result2 = split(sql2);
+      String sql2 = "SELECT * FROM table1; SELECT * FROM table2";
+      io.rqlite.client.L4Statement[] result2 = split(sql2);
       assertEquals(2, result2.length);
       assertEquals("SELECT * FROM table1", result2[0].sql);
       assertEquals("SELECT * FROM table2", result2[1].sql);
 
       // Test semicolons in quoted strings
-      var sql3 = "SELECT * FROM table WHERE name = 'a;b'; INSERT INTO table (name) VALUES ('c;d')";
-      var result3 = split(sql3);
+      String sql3 = "SELECT * FROM table WHERE name = 'a;b'; INSERT INTO table (name) VALUES ('c;d')";
+      io.rqlite.client.L4Statement[] result3 = split(sql3);
       assertEquals(2, result3.length);
       assertEquals("SELECT * FROM table WHERE name = 'a;b'", result3[0].sql);
       assertEquals("INSERT INTO table (name) VALUES ('c;d')", result3[1].sql);
 
       // Test semicolons in comments
-      var sql4 = "SELECT * FROM table -- comment; with semicolon\n; INSERT INTO table (a) VALUES (1)";
-      var result4 = split(sql4);
+      String sql4 = "SELECT * FROM table -- comment; with semicolon\n; INSERT INTO table (a) VALUES (1)";
+      io.rqlite.client.L4Statement[] result4 = split(sql4);
       assertEquals(2, result4.length);
       assertEquals("SELECT * FROM table -- comment; with semicolon", result4[0].sql);
       assertEquals("INSERT INTO table (a) VALUES (1)", result4[1].sql);
 
       // Test edge cases
-      var sql5 = "";
-      var result5 = split(sql5);
+      String sql5 = "";
+      io.rqlite.client.L4Statement[] result5 = split(sql5);
       assertEquals(0, result5.length);
 
-      var sql6 = ";;";
-      var result6 = split(sql6);
+      String sql6 = ";;";
+      io.rqlite.client.L4Statement[] result6 = split(sql6);
       assertEquals(0, result6.length); // Empty statements ignored
 
-      var sql7 = "SELECT * FROM table; ; SELECT * FROM table2";
-      var result7 = split(sql7);
+      String sql7 = "SELECT * FROM table; ; SELECT * FROM table2";
+      io.rqlite.client.L4Statement[] result7 = split(sql7);
       assertEquals(2, result7.length);
       assertEquals("SELECT * FROM table", result7[0].sql);
       assertEquals("SELECT * FROM table2", result7[1].sql);

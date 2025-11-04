@@ -46,7 +46,7 @@ public class L4DbMeta implements DatabaseMetaData {
   }
 
   @Override public boolean isReadOnly() throws SQLException {
-    try (var rs = executeQuery("PRAGMA writable_schema")) {
+    try (ResultSet rs = executeQuery("PRAGMA writable_schema")) {
       if (rs.next()) {
         return rs.getInt(1) == 0; // 0 means read-only
       }
@@ -78,9 +78,9 @@ public class L4DbMeta implements DatabaseMetaData {
     if (sqliteVersion != null) {
       return sqliteVersion;
     }
-    try (var rs = executeQuery("SELECT sqlite_version()")) {
+    try (ResultSet rs = executeQuery("SELECT sqlite_version()")) {
       if (rs.next()) {
-        var ver = rs.getString(1);
+        String ver = rs.getString(1);
         this.sqliteVersion = ver;
         return ver;
       }
@@ -743,14 +743,23 @@ public class L4DbMeta implements DatabaseMetaData {
   }
 
   @Override public int getDatabaseMajorVersion() throws SQLException {
-    var version = getDatabaseProductVersion();
-    return Integer.parseInt(version.split("\\.")[0]);
+    String version = getDatabaseProductVersion();
+    try {
+      String[] parts = version.split("\\.");
+      return Integer.parseInt(parts[0]);
+    } catch (Exception e) {
+      return 0;
+    }
   }
 
   @Override public int getDatabaseMinorVersion() throws SQLException {
-    var version = getDatabaseProductVersion();
-    var parts = version.split("\\.");
-    return parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
+    String version = getDatabaseProductVersion();
+    try {
+      String[] parts = version.split("\\.");
+      return Integer.parseInt(parts[1]);
+    } catch (Exception e) {
+      return 0;
+    }
   }
 
   @Override public int getJDBCMajorVersion() {

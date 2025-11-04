@@ -2,53 +2,56 @@ package io.rqlite.client;
 
 import javax.net.ssl.*;
 import java.io.ByteArrayInputStream;
-import java.net.http.HttpClient;
-import java.security.*;
-import java.security.cert.*;
-import java.time.Duration;
+import java.io.FileInputStream;
+import java.security.KeyStore;
+import java.security.SecureRandom;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 
 public class L4Http {
 
-  public static HttpClient.Builder defaultHttpClient(long timeoutSec) {
-    return HttpClient.newBuilder()
-      .connectTimeout(Duration.ofSeconds(timeoutSec));
-  }
-
-  public static HttpClient.Builder newTLSSClientInsecure(long timeoutSec) throws Exception {
-    var sslContext = SSLContext.getInstance("TLS");
-    var trustAll = new TrustManager[]{
+  // Configure global HTTPS to trust all certificates (insecure)
+  public static void configureInsecureTLS() throws Exception {
+    SSLContext sslContext = SSLContext.getInstance("TLS");
+    TrustManager[] trustAll = new TrustManager[]{
       new X509TrustManager() {
         public void checkClientTrusted(X509Certificate[] chain, String authType) {}
         public void checkServerTrusted(X509Certificate[] chain, String authType) {}
-        public X509Certificate[] getAcceptedIssuers() {
-          return new X509Certificate[0];
-        }
+        public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
       }
     };
     sslContext.init(null, trustAll, new SecureRandom());
-    return HttpClient.newBuilder()
-      .sslContext(sslContext)
-      .connectTimeout(Duration.ofSeconds(timeoutSec));
+    HttpsURLConnection.setDefaultSSLSocketFactory(sslContext.getSocketFactory());
+    HttpsURLConnection.setDefaultHostnameVerifier(new HostnameVerifier() {
+      @Override public boolean verify(String hostname, SSLSession session) { return true; }
+    });
   }
 
-  public static HttpClient.Builder newTLSSClient(String caCertPath, long timeoutSec) throws Exception {
-    var cf = CertificateFactory.getInstance("X.509");
-    var caBytes = java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(caCertPath));
-    var bis = new ByteArrayInputStream(caBytes);
-    var caCert = (X509Certificate) cf.generateCertificate(bis);
+  // Configure global HTTPS to trust the provided CA certificate
+  public static void configureTLSWithCACert(String caCertPath) throws Exception {
+    CertificateFactory cf = CertificateFactory.getInstance("X.509");
+    byte[] caBytes;
+    try (FileInputStream fis = new FileInputStream(caCertPath)) {
+      caBytes = new byte[fis.available()];
+      int read = fis.read(caBytes);
+      if (read <= 0) {
+        throw new IllegalStateException("Failed to read CA certificate: " + caCertPath);
+      }
+    }
+    ByteArrayInputStream bis = new ByteArrayInputStream(caBytes);
+    X509Certificate caCert = (X509Certificate) cf.generateCertificate(bis);
 
-    var ks = KeyStore.getInstance(KeyStore.getDefaultType());
+    KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
     ks.load(null, null);
     ks.setCertificateEntry("caCert", caCert);
 
-    var tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+    TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
     tmf.init(ks);
 
-    var sslContext = SSLContext.getInstance("TLS");
+    SSLContext sslContext = SSLContext.getInstance("TLS");
     sslContext.init(null, tmf.getTrustManagers(), new SecureRandom());
-    return HttpClient.newBuilder()
-      .sslContext(sslContext)
-      .connectTimeout(Duration.ofSeconds(timeoutSec));
-  }
 
+    HttpsURLConnection.setDefaultSSLSocketFactory(sslContext.getSocketFactory());
+    // Use default hostname verifier; do not override
+  }
 }

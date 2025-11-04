@@ -61,13 +61,23 @@ public class L4Jdbc {
   };
 
   public static String loadResourceAsString(String resourcePath) {
-    try (var is = L4Jdbc.class.getResourceAsStream(resourcePath)) {
+    InputStream is = null;
+    try {
+      is = L4Jdbc.class.getResourceAsStream(resourcePath);
       if (is == null) {
         throw new IOException("Resource not found: " + resourcePath);
       }
-      return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      byte[] buf = new byte[4096];
+      int n;
+      while ((n = is.read(buf)) != -1) {
+        baos.write(buf, 0, n);
+      }
+      return new String(baos.toByteArray(), StandardCharsets.UTF_8);
     } catch (Exception e) {
       throw new IllegalArgumentException(e);
+    } finally {
+      if (is != null) try { is.close(); } catch (IOException ignored) {}
     }
   }
 
@@ -76,17 +86,17 @@ public class L4Jdbc {
   }
 
   public static int driverVersionMajor() {
-    var ver = driverVersion();
+    String ver = driverVersion();
     return Integer.parseInt(ver.split("\\.")[0]);
   }
 
   public static int driverVersionMinor() {
-    var ver = driverVersion();
+    String ver = driverVersion();
     return Integer.parseInt(ver.split("\\.")[1]);
   }
 
   public static boolean anyOf(int sourceType, int ... types) {
-    for (var t : types) {
+    for (int t : types) {
       if (sourceType == t) {
         return true;
       }
@@ -97,7 +107,7 @@ public class L4Jdbc {
   public static boolean castBoolean(String value, int columnIndex, int sourceJdbcType) throws SQLException {
     if (anyOf(sourceJdbcType, INTEGER, NUMERIC)) {
       try {
-        var longVal = Long.parseLong(value);
+        long longVal = Long.parseLong(value);
         if (longVal == 0 || longVal == 1) {
           return longVal == 1;
         }
@@ -114,7 +124,7 @@ public class L4Jdbc {
   public static int castInteger(String value, int columnIndex, int sourceJdbcType) throws SQLException {
     if (anyOf(sourceJdbcType, INTEGER, TINYINT, SMALLINT, BOOLEAN, NUMERIC)) {
       try {
-        var longVal = Long.parseLong(value);
+        long longVal = Long.parseLong(value);
         if (longVal >= Integer.MIN_VALUE && longVal <= Integer.MAX_VALUE) {
           return (int) longVal;
         }
@@ -162,7 +172,7 @@ public class L4Jdbc {
   public static byte castByte(String value, int columnIndex, int sourceJdbcType) throws SQLException {
     if (anyOf(sourceJdbcType,  INTEGER, TINYINT, BOOLEAN, NUMERIC)) {
       try {
-        var longVal = Long.parseLong(value);
+        long longVal = Long.parseLong(value);
         if (longVal >= Byte.MIN_VALUE && longVal <= Byte.MAX_VALUE) {
           return (byte) longVal;
         }
@@ -177,7 +187,7 @@ public class L4Jdbc {
   public static short castShort(String value, int columnIndex, int sourceJdbcType) throws SQLException {
     if (anyOf(sourceJdbcType, INTEGER, TINYINT, SMALLINT, BOOLEAN, NUMERIC)) {
       try {
-        var longVal = Long.parseLong(value);
+        long longVal = Long.parseLong(value);
         if (longVal >= Short.MIN_VALUE && longVal <= Short.MAX_VALUE) {
           return (short) longVal;
         }
@@ -192,7 +202,7 @@ public class L4Jdbc {
   public static BigDecimal castBigDecimal(String value, int columnIndex, int sourceJdbcType, int scale) throws SQLException {
     if (anyOf(sourceJdbcType, INTEGER, FLOAT, DOUBLE, VARCHAR, NUMERIC, BOOLEAN, TINYINT, SMALLINT, BIGINT)) {
       try {
-        var bd = new BigDecimal(value);
+        BigDecimal bd = new BigDecimal(value);
         if (scale != -1) {
           bd =  bd.setScale(scale, RoundingMode.HALF_UP);
         }
@@ -206,7 +216,7 @@ public class L4Jdbc {
 
   public static InputStream castAsciiStream(String value, int columnIndex, int sourceJdbcType) throws SQLException {
     if (anyOf(sourceJdbcType, VARCHAR, CLOB, NCLOB, NVARCHAR, INTEGER, DOUBLE, NUMERIC, BOOLEAN)) {
-      var asciiBytes = value.getBytes(StandardCharsets.US_ASCII); // Convert non-ASCII to '?'
+      byte[] asciiBytes = value.getBytes(StandardCharsets.US_ASCII); // Convert non-ASCII to '?'
       return new ByteArrayInputStream(asciiBytes);
     }
     throw castError(value, columnIndex, sourceJdbcType, VARCHAR_STREAM);
@@ -214,7 +224,7 @@ public class L4Jdbc {
 
   public static InputStream castUnicodeStream(String value, int columnIndex, int sourceJdbcType) throws SQLException {
     if (anyOf(sourceJdbcType, VARCHAR, CLOB, NCLOB, NVARCHAR, INTEGER, DOUBLE, NUMERIC, BOOLEAN)) {
-      var unicodeBytes = value.getBytes(StandardCharsets.UTF_16BE); // Encode as UTF-16BE
+      byte[] unicodeBytes = value.getBytes(StandardCharsets.UTF_16BE); // Encode as UTF-16BE
       return new ByteArrayInputStream(unicodeBytes);
     }
     throw castError(value, columnIndex, sourceJdbcType, UNICODE_STREAM);
@@ -223,7 +233,7 @@ public class L4Jdbc {
   public static InputStream castBinaryStream(String value, int columnIndex, int sourceJdbcType) throws SQLException {
     if (sourceJdbcType == BLOB) {
       try {
-        var bytes = Base64.getDecoder().decode(value);
+        byte[] bytes = Base64.getDecoder().decode(value);
         return new ByteArrayInputStream(bytes);
       } catch (IllegalArgumentException e) {
         throw badB64(columnIndex, value, e);
@@ -264,13 +274,13 @@ public class L4Jdbc {
       try {
         // Try parsing as ISO timestamp (e.g., "2023-10-15T00:00:00Z")
         try {
-          var instant = Instant.parse(value); // Handles ISO 8601 with UTC (Z) - absolute, no TZ needed
+          Instant instant = Instant.parse(value); // Handles ISO 8601 with UTC (Z) - absolute, no TZ needed
           return new Date(instant.toEpochMilli());
         } catch (DateTimeParseException e) {
           // Fallback to ISO local date (e.g., "2023-10-15")
-          var localDate = LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE);
-          var calendar = cal != null ? cal : Calendar.getInstance();
-          var zdt = localDate.atStartOfDay(calendar.getTimeZone().toZoneId());
+          LocalDate localDate = LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE);
+          Calendar calendar = cal != null ? cal : Calendar.getInstance();
+          ZonedDateTime zdt = localDate.atStartOfDay(calendar.getTimeZone().toZoneId());
           return new Date(zdt.toInstant().toEpochMilli());
         }
       } catch (DateTimeParseException e) {
@@ -278,7 +288,7 @@ public class L4Jdbc {
       }
     } else if (sourceJdbcType == INTEGER) {
       try {
-        var seconds = Long.parseLong(value);
+        long seconds = Long.parseLong(value);
         return new Date(seconds * 1000L); // Unix timestamp
       } catch (NumberFormatException e) {
         throw badTimestamp(columnIndex, value, e);
@@ -290,17 +300,17 @@ public class L4Jdbc {
   public static Time castTime(String value, int columnIndex, int sourceJdbcType, Calendar cal) throws SQLException {
     if (anyOf(sourceJdbcType, VARCHAR, TIME, TIMESTAMP)) {
       try {
-        var localTime = LocalTime.parse(value, DateTimeFormatter.ISO_LOCAL_TIME);
-        var calendar = cal != null ? cal : Calendar.getInstance();
-        var ldt = localTime.atDate(LocalDate.ofEpochDay(0)); // Epoch day for Time
-        var zdt = ldt.atZone(calendar.getTimeZone().toZoneId());
+        LocalTime localTime = LocalTime.parse(value, DateTimeFormatter.ISO_LOCAL_TIME);
+        Calendar calendar = cal != null ? cal : Calendar.getInstance();
+        LocalDateTime ldt = localTime.atDate(LocalDate.ofEpochDay(0)); // Epoch day for Time
+        ZonedDateTime zdt = ldt.atZone(calendar.getTimeZone().toZoneId());
         return new Time(zdt.toInstant().toEpochMilli());
       } catch (DateTimeParseException e) {
         throw badTime(columnIndex, value, e);
       }
     } else if (sourceJdbcType == INTEGER) {
       try {
-        var seconds = Long.parseLong(value);
+        long seconds = Long.parseLong(value);
         return new Time(seconds * 1000L); // Unix timestamp
       } catch (NumberFormatException e) {
         throw badTimestamp(columnIndex, value, e);
@@ -311,22 +321,22 @@ public class L4Jdbc {
 
   public static Timestamp castTimestamp(Object raw, int columnIndex, int sourceJdbcType, Calendar cal) throws SQLException {
     if (raw instanceof Timestamp) {
-      var utcTs = L4Utc.utcDateTimeOf((Timestamp) raw);
-      var ms = utcTs.toInstant(ZoneOffset.UTC).toEpochMilli();
+      LocalDateTime utcTs = L4Utc.utcDateTimeOf((Timestamp) raw);
+      long ms = utcTs.toInstant(ZoneOffset.UTC).toEpochMilli();
       return new Timestamp(ms);
     }
-    var value = raw.toString();
+    String value = raw.toString();
     if (anyOf(sourceJdbcType, VARCHAR, TIMESTAMP, DATE)) {
       try {
         // Try parsing as ISO timestamp (e.g., "2023-10-15T14:30:00Z")
         try {
-          var instant = Instant.parse(value); // Handles ISO 8601 with UTC (Z) - absolute, no TZ needed
+          Instant instant = Instant.parse(value); // Handles ISO 8601 with UTC (Z) - absolute, no TZ needed
           return new Timestamp(instant.toEpochMilli());
         } catch (DateTimeParseException e) {
           // Fallback to ISO local date-time (e.g., "2023-10-15 14:30:00")
-          var localDateTime = LocalDateTime.parse(value, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-          var calendar = cal != null ? cal : Calendar.getInstance();
-          var zdt = localDateTime.atZone(calendar.getTimeZone().toZoneId());
+          LocalDateTime localDateTime = LocalDateTime.parse(value, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+          Calendar calendar = cal != null ? cal : Calendar.getInstance();
+          ZonedDateTime zdt = localDateTime.atZone(calendar.getTimeZone().toZoneId());
           return new Timestamp(zdt.toInstant().toEpochMilli());
         }
       } catch (DateTimeParseException e) {
@@ -334,7 +344,7 @@ public class L4Jdbc {
       }
     } else if (sourceJdbcType == INTEGER) {
       try {
-        var seconds = Long.parseLong(value);
+        long seconds = Long.parseLong(value);
         return new Timestamp(seconds * 1000L); // Unix timestamp
       } catch (NumberFormatException e) {
         throw badTimestamp(columnIndex, value, e);
@@ -356,7 +366,7 @@ public class L4Jdbc {
 
   public static NClob castNClob(String value, int columnIndex, int sourceJdbcType) throws SQLException {
     if (anyOf(sourceJdbcType, VARCHAR, NCLOB, NVARCHAR, CLOB)) {
-      var clob = new L4NClob();
+      L4NClob clob = new L4NClob();
       clob.setString(1, value);
       return clob;
     }
@@ -419,27 +429,31 @@ public class L4Jdbc {
         case BIGINT:            return castLong(value, columnIndex, sourceJdbcType);
         case DOUBLE:            return castDouble(value, columnIndex, sourceJdbcType);
         case FLOAT:             return castFloat(value, columnIndex, sourceJdbcType);
-        case BLOB:              return castBlob(value, columnIndex, sourceJdbcType);
         case TINYINT:           return castByte(value, columnIndex, sourceJdbcType);
         case SMALLINT:          return castShort(value, columnIndex, sourceJdbcType);
-        case NUMERIC:
+        case NUMERIC:           return castBigDecimal(value, columnIndex, sourceJdbcType, scale);
         case DECIMAL:           return castBigDecimal(value, columnIndex, sourceJdbcType, scale);
         case DATE:              return castDate(value, columnIndex, sourceJdbcType, cal);
         case TIME:              return castTime(value, columnIndex, sourceJdbcType, cal);
         case TIMESTAMP:         return castTimestamp(value, columnIndex, sourceJdbcType, cal);
+        case BLOB:              return castBlob(value, columnIndex, sourceJdbcType);
+        case NCLOB_STREAM:      return castNClob(value, columnIndex, sourceJdbcType);
         case VARCHAR_STREAM:    return castAsciiStream(value, columnIndex, sourceJdbcType);
         case UNICODE_STREAM:    return castUnicodeStream(value, columnIndex, sourceJdbcType);
-        case BINARY_STREAM:     return castBinaryStream(value, columnIndex, sourceJdbcType);
         case CHARACTER_STREAM:  return castCharacterStream(value, columnIndex, sourceJdbcType);
         case CLOB_STREAM:       return castClob(value, columnIndex, sourceJdbcType);
-        case OBJECT_STREAM:     return castObject(value, columnIndex, sourceJdbcType, type);
         case URL_STREAM:        return castURL(value, columnIndex, sourceJdbcType);
-        case NCLOB_STREAM:      return castNClob(value, columnIndex, sourceJdbcType);
+        case BINARY_STREAM:     return castBinaryStream(value, columnIndex, sourceJdbcType);
         case NCHARACTER_STREAM: return castNCharacterStream(value, columnIndex, sourceJdbcType);
         case NULL:              return null;
         default:
-          throw notSupported(format("JDBC type %d for column %d", targetJdbcType, columnIndex));
+          if (type != null) {
+            return castObject(value, columnIndex, sourceJdbcType, type);
+          }
+          throw castError(value, columnIndex, sourceJdbcType, targetJdbcType);
       }
+    } catch (SQLException e) {
+      throw e; // Preserve existing exception types
     } catch (Exception e) {
       throw badConversion(columnIndex, value, e);
     }
@@ -491,8 +505,8 @@ public class L4Jdbc {
     if (rqliteType.isEmpty()) {
       return NULL; // SELECT NULL AS TABLE_CAT, etc...
     }
-    var parts = rqliteType.trim().toUpperCase().split("[(),]");
-    var rqType = parts[0];
+    String[] parts = rqliteType.trim().toUpperCase().split("[(),]");
+    String rqType = parts[0];
     switch (rqType) {
       case RQ_INT:
       case RQ_INTEGER:    return INTEGER;
@@ -523,7 +537,7 @@ public class L4Jdbc {
     if (rqType == null || RQ_NULL.equalsIgnoreCase(rqType)) {
       return false; // NULL or unknown
     }
-    var typeUpper = rqType.toUpperCase();
+    String typeUpper = rqType.toUpperCase();
     return typeUpper.equals(RQ_INTEGER)
       || typeUpper.equals(RQ_NUMERIC)
       || typeUpper.equals(RQ_TINYINT)
@@ -537,7 +551,7 @@ public class L4Jdbc {
     if (rqliteType == null || RQ_NULL.equalsIgnoreCase(rqliteType)) {
       return 0; // NULL or unknown
     }
-    var typeUpper = rqliteType.toUpperCase();
+    String typeUpper = rqliteType.toUpperCase();
     switch (typeUpper) {
       case RQ_INTEGER:    return 10;     // 32-bit integer (approx 10 digits)
       case RQ_NUMERIC:    return 38;     // Arbitrary precision, conservative estimate
@@ -562,7 +576,7 @@ public class L4Jdbc {
   }
 
   public static Class<?> getJdbcTypeClass(String type) {
-    var typeUpper = type.toUpperCase();
+    String typeUpper = type.toUpperCase();
     switch (typeUpper) {
       case RQ_INTEGER:   return Integer.class;
       case RQ_NUMERIC:   return java.math.BigDecimal.class;
@@ -639,7 +653,7 @@ public class L4Jdbc {
   }
 
   public static int getJdbcTypeColumnDisplaySize(String type) {
-    var typeUpper = type.toUpperCase();
+    String typeUpper = type.toUpperCase();
     switch (typeUpper) {
       case RQ_INTEGER:    return 11;   // -2147483648 to 2147483647
       case RQ_NUMERIC:    return 38;   // Arbitrary precision, conservative estimate
@@ -683,15 +697,15 @@ public class L4Jdbc {
       return new L4Statement[0];
     }
 
-    var statements = new ArrayList<String>();
-    var currentStatement = new StringBuilder();
-    var inSingleQuote = false;
-    var inDoubleQuote = false;
-    var inSingleLineComment = false;
-    var inMultiLineComment = false;
+    ArrayList<String> statements = new ArrayList<String>();
+    StringBuilder currentStatement = new StringBuilder();
+    boolean inSingleQuote = false;
+    boolean inDoubleQuote = false;
+    boolean inSingleLineComment = false;
+    boolean inMultiLineComment = false;
 
     for (int i = 0; i < rawSql.length(); i++) {
-      var c = rawSql.charAt(i);
+      char c = rawSql.charAt(i);
       if (inSingleLineComment) {
         if (c == '\n') {
           inSingleLineComment = false;
@@ -753,7 +767,7 @@ public class L4Jdbc {
         continue;
       }
       if (c == ';') {
-        var stmt = currentStatement.toString().trim();
+        String stmt = currentStatement.toString().trim();
         if (!stmt.isEmpty()) {
           statements.add(stmt);
         }
@@ -764,14 +778,16 @@ public class L4Jdbc {
     }
 
     // Add the last statement if non-empty
-    var lastStmt = currentStatement.toString().trim();
+    String lastStmt = currentStatement.toString().trim();
     if (!lastStmt.isEmpty()) {
       statements.add(lastStmt);
     }
 
-    return statements.stream()
-      .map(raw -> new L4Statement().sql(raw))
-      .toArray(L4Statement[]::new);
+    L4Statement[] arr = new L4Statement[statements.size()];
+    for (int i = 0; i < statements.size(); i++) {
+      arr[i] = new L4Statement().sql(statements.get(i));
+    }
+    return arr;
   }
 
 }

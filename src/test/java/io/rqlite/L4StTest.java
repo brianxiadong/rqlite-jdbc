@@ -4,6 +4,7 @@ import io.rqlite.client.L4Client;
 import io.rqlite.client.L4Options;
 import io.rqlite.client.L4Statement;
 import io.rqlite.jdbc.L4St;
+import io.rqlite.client.L4Response;
 import j8spec.annotation.DefinedOrder;
 import j8spec.junit.J8SpecRunner;
 import org.junit.runner.RunWith;
@@ -23,11 +24,11 @@ public class L4StTest {
   // Setup helper to create and populate test table
   private static void setupTestTable(L4Client rq) {
     // Drop existing table
-    var dr = rq.executeSingle("DROP TABLE IF EXISTS st_test_data");
+    L4Response dr = rq.executeSingle("DROP TABLE IF EXISTS st_test_data");
     assertEquals(200, dr.statusCode);
 
     // Create table with diverse data types
-    var createTable = String.join("\n", "",
+    String createTable = String.join("\n", "",
       "CREATE TABLE st_test_data (",
       "  id INTEGER PRIMARY KEY AUTOINCREMENT,",
       "  num_val NUMERIC,",
@@ -35,13 +36,13 @@ public class L4StTest {
       "  text_val VARCHAR,",
       "  blob_val BLOB",
       ")");
-    var res0 = rq.executeSingle(createTable);
+    L4Response res0 = rq.executeSingle(createTable);
     assertEquals(200, res0.statusCode);
 
     // Insert test data
-    var insertSql = "INSERT INTO st_test_data (num_val, bool_val, text_val, blob_val) VALUES (?, ?, ?, ?)";
-    var blobData = Base64.getEncoder().encodeToString("Test blob".getBytes());
-    var res2 = rq.execute(
+    String insertSql = "INSERT INTO st_test_data (num_val, bool_val, text_val, blob_val) VALUES (?, ?, ?, ?)";
+    String blobData = Base64.getEncoder().encodeToString("Test blob".getBytes());
+    L4Response res2 = rq.execute(
       true,
       new L4Statement().sql(insertSql).withPositionalParams(
         123.45, 1, "Hello, world!", blobData
@@ -57,12 +58,12 @@ public class L4StTest {
     if (L4Tests.runIntegrationTests) {
       it("Tests L4St query execution and result navigation", () -> {
         setupTestTable(rq);
-        var stmt = new L4St(rq);
+        L4St stmt = new L4St(rq);
 
         assertNull(stmt.getWarnings());
 
         // Test executeQuery with single result
-        var rs = stmt.executeQuery("SELECT * FROM st_test_data WHERE id = 1");
+        ResultSet rs = stmt.executeQuery("SELECT * FROM st_test_data WHERE id = 1");
         assertNotNull(rs);
         assertTrue(rs.next());
         assertEquals(1, rs.getInt("id"));
@@ -104,12 +105,12 @@ public class L4StTest {
 
       it("Tests L4St update operations", () -> {
         setupTestTable(rq);
-        var stmt = new L4St(rq);
+        L4St stmt = new L4St(rq);
 
         // Test executeUpdate
         int rowsAffected = stmt.executeUpdate("UPDATE st_test_data SET num_val = 999.99 WHERE id = 1");
         assertEquals(1, rowsAffected);
-        var rs = stmt.executeQuery("SELECT num_val FROM st_test_data WHERE id = 1");
+        ResultSet rs = stmt.executeQuery("SELECT num_val FROM st_test_data WHERE id = 1");
         assertTrue(rs.next());
         assertEquals(999.99, rs.getDouble("num_val"), 0.001);
         rs.close();
@@ -126,12 +127,12 @@ public class L4StTest {
 
       it("Tests L4St execute method", () -> {
         setupTestTable(rq);
-        var stmt = new L4St(rq);
+        L4St stmt = new L4St(rq);
 
         // Test execute returning ResultSet
-        var hasResultSet = stmt.execute("SELECT * FROM st_test_data WHERE id = 1");
+        boolean hasResultSet = stmt.execute("SELECT * FROM st_test_data WHERE id = 1");
         assertTrue(hasResultSet);
-        var rs = stmt.getResultSet();
+        ResultSet rs = stmt.getResultSet();
         assertNotNull(rs);
         assertTrue(rs.next());
         assertEquals(1, rs.getInt("id"));
@@ -171,14 +172,14 @@ public class L4StTest {
 
       it("Tests L4St batch execution", () -> {
         setupTestTable(rq);
-        var stmt = new L4St(rq);
+        L4St stmt = new L4St(rq);
 
         // Test batch with updates
         stmt.addBatch("UPDATE st_test_data SET num_val = 111.11 WHERE id = 1");
         stmt.addBatch("UPDATE st_test_data SET num_val = 222.22 WHERE id = 2");
         int[] updateCounts = stmt.executeBatch();
         assertArrayEquals(new int[]{1, 1}, updateCounts);
-        var rs = stmt.executeQuery("SELECT num_val FROM st_test_data ORDER BY id");
+        ResultSet rs = stmt.executeQuery("SELECT num_val FROM st_test_data ORDER BY id");
         assertTrue(rs.next());
         assertEquals(111.11, rs.getDouble("num_val"), 0.001);
         assertTrue(rs.next());
@@ -198,7 +199,7 @@ public class L4StTest {
           fail("Expected BatchUpdateException");
         } catch (SQLException e) {
           assertEquals(SqlStateConnectionError, e.getSQLState());
-          var bue = (BatchUpdateException) e.getCause();
+          BatchUpdateException bue = (BatchUpdateException) e.getCause();
           assertArrayEquals(new int[]{1, 0}, bue.getUpdateCounts());
         }
 
@@ -207,13 +208,13 @@ public class L4StTest {
 
       it("Tests L4St closeOnCompletion", () -> {
         setupTestTable(rq);
-        var stmt = new L4St(rq);
+        L4St stmt = new L4St(rq);
 
         // Test closeOnCompletion
         assertFalse(stmt.isCloseOnCompletion());
         stmt.closeOnCompletion();
         assertTrue(stmt.isCloseOnCompletion());
-        var rs = stmt.executeQuery("SELECT * FROM st_test_data WHERE id = 1");
+        ResultSet rs = stmt.executeQuery("SELECT * FROM st_test_data WHERE id = 1");
         assertFalse(stmt.isClosed());
         rs.close();
         assertTrue(stmt.isClosed());
@@ -245,13 +246,13 @@ public class L4StTest {
 
       it("Tests L4St timeout handling", () -> {
         setupTestTable(rq);
-        var stmt = new L4St(rq);
+        L4St stmt = new L4St(rq);
 
         // Test default timeout (0, no timeout)
         assertEquals(L4Options.timeoutSec, stmt.getQueryTimeout());
         stmt.setQueryTimeout(10);
         assertEquals(10, stmt.getQueryTimeout());
-        var rs = stmt.executeQuery("SELECT * FROM st_test_data");
+        ResultSet rs = stmt.executeQuery("SELECT * FROM st_test_data");
         assertTrue(rs.next());
         rs.close();
 
@@ -275,12 +276,12 @@ public class L4StTest {
 
       it("Tests L4St max rows and fetch size", () -> {
         setupTestTable(rq);
-        var stmt = new L4St(rq);
+        L4St stmt = new L4St(rq);
 
         // Test max rows
         stmt.setMaxRows(1);
         assertEquals(1, stmt.getMaxRows());
-        var rs = stmt.executeQuery("SELECT * FROM st_test_data");
+        ResultSet rs = stmt.executeQuery("SELECT * FROM st_test_data");
         assertTrue(rs.next());
         assertFalse(rs.next()); // Limited to 1 row
         rs.close();
@@ -322,7 +323,7 @@ public class L4StTest {
 
       it("Tests L4St unsupported operations and error handling", () -> {
         setupTestTable(rq);
-        var stmt = new L4St(rq);
+        L4St stmt = new L4St(rq);
 
         // Test unsupported methods
         try {
@@ -431,7 +432,7 @@ public class L4StTest {
 
       it("Tests L4St edge cases and invalid inputs", () -> {
         setupTestTable(rq);
-        var stmt = new L4St(rq);
+        L4St stmt = new L4St(rq);
 
         // Test null or empty SQL
         try {

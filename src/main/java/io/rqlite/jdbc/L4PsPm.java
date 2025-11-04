@@ -32,12 +32,12 @@ public class L4PsPm implements ParameterMetaData {
   }
 
   @Override public boolean isSigned(int param) {
-    var rqt = rqTypeOf(paramAt(param));
+    String rqt = rqTypeOf(paramAt(param));
     return getJdbcTypeSigned(rqt);
   }
 
   @Override public int getPrecision(int param) {
-    var rqt = rqTypeOf(paramAt(param));
+    String rqt = rqTypeOf(paramAt(param));
     return getJdbcTypePrecision(rqt);
   }
 
@@ -46,7 +46,7 @@ public class L4PsPm implements ParameterMetaData {
   }
 
   @Override public int getParameterType(int param) {
-    var rqt = rqTypeOf(paramAt(param));
+    String rqt = rqTypeOf(paramAt(param));
     return getJdbcType(rqt);
   }
 
@@ -55,7 +55,7 @@ public class L4PsPm implements ParameterMetaData {
   }
 
   @Override public String getParameterClassName(int param) {
-    var o = paramAt(param);
+    Object o = paramAt(param);
     return o == null ? null : o.getClass().getCanonicalName();
   }
 

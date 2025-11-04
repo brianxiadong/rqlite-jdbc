@@ -26,14 +26,14 @@ public class L4DbMetaTest {
 
   // Helper method to read ResultSet data into a List of Maps for easier validation
   private static List<Map<String, Object>> readResultSet(ResultSet rs) throws SQLException {
-    var rows = new ArrayList<Map<String, Object>>();
-    var rsMeta = rs.getMetaData();
+    List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>();
+    ResultSetMetaData rsMeta = rs.getMetaData();
     int columnCount = rsMeta.getColumnCount();
     while (rs.next()) {
-      var row = new HashMap<String, Object>();
+      Map<String, Object> row = new HashMap<String, Object>();
       for (int i = 1; i <= columnCount; i++) {
-        var rqt = rs.getMetaData().getColumnTypeName(i);
-        var clazz = getJdbcTypeClass(rqt);
+        String rqt = rs.getMetaData().getColumnTypeName(i);
+        Class<?> clazz = getJdbcTypeClass(rqt);
         row.put(rsMeta.getColumnLabel(i), rs.getObject(i, clazz));
       }
       rows.add(row);
@@ -48,7 +48,7 @@ public class L4DbMetaTest {
     rq.executeSingle("DROP TABLE IF EXISTS metadata_table");
 
     // Create metadata_table table (same as L4RsTest)
-    var createTable = join("\n", "",
+    String createTable = join("\n", "",
       "CREATE TABLE metadata_table (",
       "  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,",
       "  num_val NUMERIC,",
@@ -70,14 +70,14 @@ public class L4DbMetaTest {
       "  blob_val BLOB",
       ")"
     );
-    var res = rq.executeSingle(createTable);
+    io.rqlite.client.L4Response res = rq.executeSingle(createTable);
     assertEquals(200, res.statusCode);
 
-    var createIndex = "CREATE UNIQUE INDEX metadata_index ON metadata_table(small_val)";
+    String createIndex = "CREATE UNIQUE INDEX metadata_index ON metadata_table(small_val)";
     assertEquals(200, rq.executeSingle(createIndex).statusCode);
 
     // Create related_table with foreign key
-    var createRelatedTable = join("\n", "",
+    String createRelatedTable = join("\n", "",
       "CREATE TABLE related_table (",
       "  rel_id INTEGER PRIMARY KEY AUTOINCREMENT,",
       "  test_id INTEGER,",
@@ -89,7 +89,7 @@ public class L4DbMetaTest {
     assertEquals(200, res.statusCode);
 
     // Insert sample data
-    var insertSql = join("", "",
+    String insertSql = join("", "",
       "INSERT INTO metadata_table (",
       "  num_val, bool_val, tiny_val, small_val, int_val, big_val, float_val, double_val,",
       "  text_val, date_val, time_val, ts_val, url_val, clob_val, nclob_val, nstring_val, blob_val",
@@ -97,7 +97,7 @@ public class L4DbMetaTest {
       "  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?",
       ")"
     );
-    var blobData = Base64.getEncoder().encodeToString("Hello, rqlite!".getBytes());
+    String blobData = java.util.Base64.getEncoder().encodeToString("Hello, rqlite!".getBytes());
     res = rq.execute(
       true,
       new L4Statement().sql(insertSql).withPositionalParams(
@@ -109,7 +109,7 @@ public class L4DbMetaTest {
     );
     assertEquals(200, res.statusCode);
 
-    var insertRelatedSql = "INSERT INTO related_table (test_id, data) VALUES (?, ?)";
+    String insertRelatedSql = "INSERT INTO related_table (test_id, data) VALUES (?, ?)";
     res = rq.execute(
       true,
       new L4Statement().sql(insertRelatedSql).withPositionalParams(1, "Related data")
@@ -294,7 +294,7 @@ public class L4DbMetaTest {
       // Metadata Queries: Procedures and Functions
       it("Tests procedure and function metadata", () -> {
         // getProcedures
-        var rs = meta.getProcedures(null, null, null);
+        ResultSet rs = meta.getProcedures(null, null, null);
         assertFalse(rs.next());
         rs.close();
         // getProcedureColumns
@@ -313,7 +313,7 @@ public class L4DbMetaTest {
 
       // Metadata Queries: Schemas
       it("Tests schema metadata", () -> {
-        var rs = meta.getSchemas();
+        ResultSet rs = meta.getSchemas();
         assertFalse(rs.next()); // SQLite does not support schemas
         rs.close();
         rs = meta.getSchemas(null, null);
@@ -323,11 +323,11 @@ public class L4DbMetaTest {
 
       // Metadata Queries: Catalogs
       it("Tests catalog metadata", () -> {
-        var rs = meta.getCatalogs();
-        var rows = readResultSet(rs);
+        ResultSet rs = meta.getCatalogs();
+        List<Map<String, Object>> rows = readResultSet(rs);
         assertFalse(rows.isEmpty()); // At least 'main' database
-        var foundMain = false;
-        for (var row : rows) {
+        boolean foundMain = false;
+        for (Map<String, Object> row : rows) {
           if (Main.equals(row.get("TABLE_CAT"))) {
             foundMain = true;
             break;
@@ -338,11 +338,11 @@ public class L4DbMetaTest {
 
       // Metadata Queries: Table Types
       it("Tests table type metadata", () -> {
-        var rs = meta.getTableTypes();
-        var rows = readResultSet(rs);
+        ResultSet rs = meta.getTableTypes();
+        List<Map<String, Object>> rows = readResultSet(rs);
         assertEquals(2, rows.size());
-        var types = new HashSet<String>();
-        for (var row : rows) {
+        Set<String> types = new HashSet<String>();
+        for (Map<String, Object> row : rows) {
           types.add((String) row.get("TABLE_TYPE"));
         }
         assertTrue(types.contains(TABLE));
@@ -351,10 +351,10 @@ public class L4DbMetaTest {
 
       // Metadata Queries: Tables
       it("Tests table metadata", () -> {
-        var rs = meta.getTables(null, null, "metadata_table", null);
-        var rows = readResultSet(rs);
+        ResultSet rs = meta.getTables(null, null, "metadata_table", null);
+        List<Map<String, Object>> rows = readResultSet(rs);
         assertEquals(1, rows.size());
-        var row = rows.get(0);
+        Map<String, Object> row = rows.get(0);
         assertEquals(Main, row.get("TABLE_CAT"));
         assertNull(row.get("TABLE_SCHEM"));
         assertEquals("metadata_table", row.get("TABLE_NAME"));
@@ -371,7 +371,7 @@ public class L4DbMetaTest {
         rows = readResultSet(rs);
         assertTrue(rows.size() >= 2); // metadata_table and related_table
         boolean foundTestData = false;
-        for (var row2 : rows) {
+        for (Map<String, Object> row2 : rows) {
           if ("metadata_table".equals(row2.get("TABLE_NAME"))) {
             foundTestData = true;
             break;
@@ -382,11 +382,11 @@ public class L4DbMetaTest {
 
       // Metadata Queries: Columns
       it("Tests column metadata", () -> {
-        var rs = meta.getColumns(null, null, "metadata_table", null);
-        var rows = readResultSet(rs);
+        ResultSet rs = meta.getColumns(null, null, "metadata_table", null);
+        List<Map<String, Object>> rows = readResultSet(rs);
         assertEquals(18, rows.size()); // 18 columns in metadata_table
-        var idColumn = rows.stream()
-          .filter(row -> "id".equals(row.get("COLUMN_NAME")))
+        Map<String, Object> idColumn = rows.stream()
+          .filter(rowx -> "id".equals(rowx.get("COLUMN_NAME")))
           .findFirst()
           .orElseThrow(() -> new AssertionError("id column not found"));
         assertEquals(Main, idColumn.get("TABLE_CAT"));
@@ -414,7 +414,7 @@ public class L4DbMetaTest {
 
       // Metadata Queries: Privileges
       it("Tests privilege metadata", () -> {
-        var rs = meta.getTablePrivileges(null, null, null);
+        ResultSet rs = meta.getTablePrivileges(null, null, null);
         assertFalse(rs.next()); // SQLite does not support privileges
         rs.close();
         rs = meta.getColumnPrivileges(null, null, "metadata_table", null);
@@ -425,10 +425,10 @@ public class L4DbMetaTest {
       // Metadata Queries: Keys and Indexes
       it("Tests key and index metadata", () -> {
         // getPrimaryKeys
-        var rs = meta.getPrimaryKeys(null, null, "metadata_table");
-        var rows = readResultSet(rs);
+        ResultSet rs = meta.getPrimaryKeys(null, null, "metadata_table");
+        List<Map<String, Object>> rows = readResultSet(rs);
         assertEquals(1, rows.size());
-        var pk = rows.get(0);
+        Map<String, Object> pk = rows.get(0);
         assertEquals(Main, pk.get(TABLE_CAT));
         assertNull(pk.get("TABLE_SCHEM"));
         assertEquals("metadata_table", pk.get("TABLE_NAME"));
@@ -440,7 +440,7 @@ public class L4DbMetaTest {
         rs = meta.getBestRowIdentifier(null, null, "metadata_table", DatabaseMetaData.bestRowSession, true);
         rows = readResultSet(rs);
         assertEquals(1, rows.size());
-        var bri = rows.get(0);
+        Map<String, Object> bri = rows.get(0);
         assertEquals(DatabaseMetaData.bestRowSession, bri.get("SCOPE"));
         assertEquals("id", bri.get("COLUMN_NAME"));
         assertEquals(Types.INTEGER, bri.get("DATA_TYPE"));
@@ -454,7 +454,7 @@ public class L4DbMetaTest {
         rs = meta.getImportedKeys(null, null, "related_table");
         rows = readResultSet(rs);
         assertEquals(1, rows.size());
-        var fk = rows.get(0);
+        Map<String, Object> fk = rows.get(0);
         assertEquals(Main, fk.get("PKTABLE_CAT"));
         assertNull(fk.get("PKTABLE_SCHEM"));
         assertEquals("metadata_table", fk.get("PKTABLE_NAME"));
@@ -473,7 +473,7 @@ public class L4DbMetaTest {
         rs = meta.getExportedKeys(null, null, "metadata_table");
         rows = readResultSet(rs);
         assertEquals(1, rows.size());
-        var ek = rows.get(0);
+        Map<String, Object> ek = rows.get(0);
         assertEquals(Main, ek.get("PKTABLE_CAT"));
         assertNull(ek.get("PKTABLE_SCHEM"));
         assertEquals("metadata_table", ek.get("PKTABLE_NAME"));
@@ -487,7 +487,7 @@ public class L4DbMetaTest {
         rs = meta.getCrossReference(null, null, "metadata_table", null, null, "related_table");
         rows = readResultSet(rs);
         assertEquals(1, rows.size());
-        var cr = rows.get(0);
+        Map<String, Object> cr = rows.get(0);
         assertEquals(Main, cr.get("PKTABLE_CAT"));
         assertEquals("metadata_table", cr.get("PKTABLE_NAME"));
         assertEquals("id", cr.get("PKCOLUMN_NAME"));
@@ -497,20 +497,20 @@ public class L4DbMetaTest {
 
         // getIndexInfo
         rs = meta.getIndexInfo(null, null, "metadata_table", true, false);
-        rows = readResultSet(rs);
-        assertFalse(rows.isEmpty()); // At least primary key index
+        List<Map<String, Object>> rowsIdx = readResultSet(rs);
+        assertFalse(rowsIdx.isEmpty()); // At least primary key index
         boolean foundPkIndex = false;
-        for (var row : rows) {
-          if ("small_val".equals(row.get("COLUMN_NAME")) && "metadata_index".equals(row.get("INDEX_NAME"))) {
+        for (Map<String, Object> rowIdx : rowsIdx) {
+          if ("small_val".equals(rowIdx.get("COLUMN_NAME")) && "metadata_index".equals(rowIdx.get("INDEX_NAME"))) {
             foundPkIndex = true;
-            assertEquals(Main, row.get("TABLE_CAT"));
-            assertNull(row.get("TABLE_SCHEM"));
-            assertEquals("metadata_table", row.get("TABLE_NAME"));
-            assertFalse((Boolean) row.get("NON_UNIQUE"));
-            assertEquals("small_val", row.get("COLUMN_NAME"));
-            assertEquals(2, row.get("ORDINAL_POSITION"));
-            assertEquals("A", row.get("ASC_OR_DESC"));
-            assertEquals(DatabaseMetaData.tableIndexOther, row.get("TYPE"));
+            assertEquals(Main, rowIdx.get("TABLE_CAT"));
+            assertNull(rowIdx.get("TABLE_SCHEM"));
+            assertEquals("metadata_table", rowIdx.get("TABLE_NAME"));
+            assertFalse((Boolean) rowIdx.get("NON_UNIQUE"));
+            assertEquals("small_val", rowIdx.get("COLUMN_NAME"));
+            assertEquals(2, rowIdx.get("ORDINAL_POSITION"));
+            assertEquals("A", rowIdx.get("ASC_OR_DESC"));
+            assertEquals(DatabaseMetaData.tableIndexOther, rowIdx.get("TYPE"));
             break;
           }
         }
@@ -519,11 +519,11 @@ public class L4DbMetaTest {
 
       // Metadata Queries: Type Info
       it("Tests type info metadata", () -> {
-        var rs = meta.getTypeInfo();
-        var rows = readResultSet(rs);
+        ResultSet rs = meta.getTypeInfo();
+        List<Map<String, Object>> rows = readResultSet(rs);
         assertTrue(rows.size() >= RQ_TYPES.length);
-        var typeNames = new HashSet<String>();
-        for (var row : rows) {
+        Set<String> typeNames = new HashSet<String>();
+        for (Map<String, Object> row : rows) {
           typeNames.add((String) row.get("TYPE_NAME"));
           assertNotNull(row.get("DATA_TYPE"));
           assertNotNull(row.get("PRECISION"));
@@ -540,7 +540,7 @@ public class L4DbMetaTest {
           assertNotNull(row.get("SQL_DATETIME_SUB"));
           assertNotNull(row.get("NUM_PREC_RADIX"));
         }
-        for (var rqType : RQ_TYPES) {
+        for (String rqType : RQ_TYPES) {
           assertTrue("Missing type: " + rqType, typeNames.contains(rqType));
         }
       });
@@ -548,7 +548,7 @@ public class L4DbMetaTest {
       // Metadata Queries: UDTs and Others
       it("Tests UDT and other metadata", () -> {
         // getUDTs
-        var rs = meta.getUDTs(null, null, null, null);
+        ResultSet rs = meta.getUDTs(null, null, null, null);
         assertFalse(rs.next());
         rs.close();
         // getSuperTypes
@@ -575,7 +575,7 @@ public class L4DbMetaTest {
 
       // Metadata Queries: Client Info
       it("Tests client info properties", () -> {
-        var rs = meta.getClientInfoProperties();
+        ResultSet rs = meta.getClientInfoProperties();
         assertFalse(rs.next()); // No client info properties
         rs.close();
       });
@@ -605,15 +605,15 @@ public class L4DbMetaTest {
         // Invalid table name
         try {
           meta.getColumns(null, null, "non_existent_table", null);
-          var rs = meta.getColumns(null, null, "non_existent_table", null);
-          var rows = readResultSet(rs);
+          ResultSet rs = meta.getColumns(null, null, "non_existent_table", null);
+          List<Map<String, Object>> rows = readResultSet(rs);
           assertEquals(0, rows.size());
         } catch (SQLException e) {
           assertEquals(SqlStateInvalidQuery, e.getSQLState());
         }
 
         // Invalid column name
-        var rs = meta.getColumns(null, null, "metadata_table", "invalid_column");
+        ResultSet rs = meta.getColumns(null, null, "metadata_table", "invalid_column");
         assertFalse(rs.next());
         rs.close();
       });

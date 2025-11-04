@@ -3,6 +3,7 @@ package io.rqlite.jdbc;
 import io.rqlite.client.L4Client;
 import io.rqlite.client.L4Response;
 import io.rqlite.client.L4Statement;
+import io.rqlite.client.L4Result;
 
 import java.sql.*;
 import java.util.*;
@@ -52,10 +53,10 @@ public class L4St implements Statement {
   }
 
   private L4Response runRaw(String sql) throws SQLException {
-    var sel = isSelect(sql);
-    var sta = split(sql);
-    var res = sel ? client.query(sta) : client.execute(isAutoCommit(), sta);
-    for (var result : res.results) {
+    boolean sel = isSelect(sql);
+    L4Statement[] sta = split(sql);
+    L4Response res = sel ? client.query(sta) : client.execute(isAutoCommit(), sta);
+    for (L4Result result : res.results) {
       checkResult(result);
     }
     return res;
@@ -87,7 +88,7 @@ public class L4St implements Statement {
     }
     try {
       currentResponse = client.execute(isAutoCommit(), new L4Statement().sql(sql));
-      var result = checkResult(currentResponse.first());
+      L4Result result = checkResult(currentResponse.first());
       return result.rowsAffected != null ? result.rowsAffected : 0;
     } catch (Exception e) {
       throw badUpdate(e);
@@ -154,10 +155,10 @@ public class L4St implements Statement {
   @Override public SQLWarning getWarnings() throws SQLException {
     checkClosed();
     if (currentResponse != null) {
-      var root = (SQLWarning) null;
-      for (var res : currentResponse.results) {
+      SQLWarning root = (SQLWarning) null;
+      for (L4Result res : currentResponse.results) {
         if (res.error != null) {
-          var warn = warnQuery(res.error);
+          SQLWarning warn = warnQuery(res.error);
           if (root == null) {
             root = warn;
           } else {
@@ -173,7 +174,7 @@ public class L4St implements Statement {
   @Override public void clearWarnings() throws SQLException {
     checkClosed();
     if (currentResponse != null) {
-      for (var res : currentResponse.results) {
+      for (L4Result res : currentResponse.results) {
         res.error = null;
       }
     }
@@ -197,12 +198,13 @@ public class L4St implements Statement {
         return false;
       }
       currentResultIndex = 0;
-      var result = currentResponse.first();
-      if (result.columns != null && !result.columns.isEmpty()) {
-        currentResultSet = new L4Rs(result, this).clampTo(maxRows);
-        return true;
+      L4Result first = currentResponse.results.get(0);
+      if (first.columns == null || first.columns.isEmpty()) {
+        currentResultSet = null;
+        return false;
       }
-      return false;
+      currentResultSet = new L4Rs(first, this).clampTo(maxRows);
+      return true;
     } catch (Exception e) {
       throw badExec(e);
     }
@@ -215,28 +217,47 @@ public class L4St implements Statement {
 
   @Override public int getUpdateCount() throws SQLException {
     checkClosed();
-    if (currentResultIndex < 0 || currentResultIndex >= currentResponse.results.size()) {
+    if (currentResponse == null || currentResultIndex < 0 || currentResultIndex >= currentResponse.results.size()) {
       return -1;
     }
-    var result = currentResponse.results.get(currentResultIndex);
-    if (result.columns != null && !result.columns.isEmpty()) {
-      return -1; // Indicates a ResultSet is available
+    L4Result result = currentResponse.results.get(currentResultIndex);
+    // For SELECT results, or when rowsAffected is not provided, return -1 per JDBC spec.
+    if ((result.columns != null && !result.columns.isEmpty()) || result.rowsAffected == null) {
+      return -1;
     }
-    return result.rowsAffected != null ? result.rowsAffected : 0;
+    return result.rowsAffected;
   }
 
   @Override public boolean getMoreResults() throws SQLException {
-    return getMoreResults(CLOSE_CURRENT_RESULT);
+    checkClosed();
+    if (currentResponse == null) {
+      return false;
+    }
+    currentResultIndex++;
+    if (currentResultIndex >= currentResponse.results.size()) {
+      currentResultSet = null;
+      return false;
+    }
+    L4Result result = currentResponse.results.get(currentResultIndex);
+    if (result.columns == null || result.columns.isEmpty()) {
+      currentResultSet = null;
+      return false;
+    }
+    currentResultSet = new L4Rs(result, this).clampTo(maxRows);
+    return true;
   }
 
   @Override public void setFetchDirection(int direction) throws SQLException {
     checkClosed();
-    throw notSupported("Fetch direction (scrollable result sets)");
+    if (direction != ResultSet.FETCH_FORWARD) {
+      throw notSupported("Only FETCH_FORWARD supported");
+    }
   }
 
   @Override public int getFetchDirection() throws SQLException {
     checkClosed();
-    throw notSupported("Fetch direction (scrollable result sets)");
+    // Statement-level fetch direction is not supported.
+    throw notSupported("Fetch direction");
   }
 
   @Override public void setFetchSize(int rows) throws SQLException {
@@ -283,9 +304,9 @@ public class L4St implements Statement {
     }
     try {
       currentResponse = client.execute(isAutoCommit(), batch.toArray(new L4Statement[0]));
-      var updateCounts = new int[currentResponse.results.size()];
+      int[] updateCounts = new int[currentResponse.results.size()];
       for (int i = 0; i < currentResponse.results.size(); i++) {
-        var result = currentResponse.results.get(i);
+        L4Result result = currentResponse.results.get(i);
         if (result.error != null) {
           throw new BatchUpdateException(result.error, SqlStateGeneralError, updateCounts, null);
         }
@@ -308,20 +329,7 @@ public class L4St implements Statement {
       throw notSupported("Result handling modes other than CLOSE_CURRENT_RESULT");
     }
     closeCurrentResultSet();
-    if (currentResultIndex + 1 < currentResponse.results.size()) {
-      currentResultIndex++;
-      var result = currentResponse.results.get(currentResultIndex);
-      if (result.error != null) {
-        throw generalError(result.error);
-      }
-      if (result.columns != null && !result.columns.isEmpty()) {
-        currentResultSet = new L4Rs(result, this).clampTo(maxRows);
-        return true;
-      }
-      return false;
-    }
-    currentResultIndex = currentResponse.results.size();
-    return false;
+    return getMoreResults();
   }
 
   @Override public ResultSet getGeneratedKeys() throws SQLException {
@@ -331,38 +339,32 @@ public class L4St implements Statement {
 
   @Override public int executeUpdate(String sql, int autoGeneratedKeys) throws SQLException {
     checkClosed();
-    if (autoGeneratedKeys == RETURN_GENERATED_KEYS) {
-      throw notSupported("Generated keys");
-    }
-    return executeUpdate(sql);
+    throw notSupported("Update with auto-generated keys");
   }
 
   @Override public int executeUpdate(String sql, int[] columnIndexes) throws SQLException {
     checkClosed();
-    throw notSupported("Generated keys by column indexes");
+    throw notSupported("Update with column indexes");
   }
 
   @Override public int executeUpdate(String sql, String[] columnNames) throws SQLException {
     checkClosed();
-    throw notSupported("Generated keys by column names");
+    throw notSupported("Update with column names");
   }
 
   @Override public boolean execute(String sql, int autoGeneratedKeys) throws SQLException {
     checkClosed();
-    if (autoGeneratedKeys == RETURN_GENERATED_KEYS) {
-      throw notSupported("Generated keys");
-    }
-    return execute(sql);
+    throw notSupported("Execution with auto-generated keys");
   }
 
   @Override public boolean execute(String sql, int[] columnIndexes) throws SQLException {
     checkClosed();
-    throw notSupported("Generated keys by column indexes");
+    throw notSupported("Execution with column indexes");
   }
 
   @Override public boolean execute(String sql, String[] columnNames) throws SQLException {
     checkClosed();
-    throw notSupported("Generated keys by column names");
+    throw notSupported("Execution with column names");
   }
 
   @Override public int getResultSetHoldability() throws SQLException {
@@ -395,20 +397,15 @@ public class L4St implements Statement {
   }
 
   @Override public <T> T unwrap(Class<T> iface) throws SQLException {
-    if (iface == null) {
-      throw badInterface();
-    }
-    if (iface == Statement.class || iface == Wrapper.class) {
+    checkClosed();
+    if (iface.isAssignableFrom(getClass())) {
       return iface.cast(this);
     }
-    throw badUnwrap(iface);
+    throw notSupported("Unwrap to: " + iface.getName());
   }
 
   @Override public boolean isWrapperFor(Class<?> iface) throws SQLException {
-    if (iface == null) {
-      throw badInterface();
-    }
-    return iface == Statement.class || iface == Wrapper.class;
+    checkClosed();
+    return iface.isAssignableFrom(getClass());
   }
-
 }

@@ -4,10 +4,7 @@ import io.rqlite.client.L4Client;
 import io.rqlite.client.L4Http;
 import io.rqlite.client.L4Options;
 
-import javax.net.ssl.SSLContext;
-import java.net.http.HttpClient;
 import java.sql.*;
-import java.time.Duration;
 import java.util.*;
 import java.util.logging.Logger;
 
@@ -41,14 +38,14 @@ public class L4Driver implements Driver {
       throw badParam(format("Invalid rqlite JDBC URL: %s", url));
     }
     try {
-      var rqliteUrl = url.substring(JDBC_URL_PREFIX.length());
-      var urlParts = rqliteUrl.split("\\?", 2);
-      var queryParams = new HashMap<String, String>();
+      String rqliteUrl = url.substring(JDBC_URL_PREFIX.length());
+      String[] urlParts = rqliteUrl.split("\\?", 2);
+      Map<String, String> queryParams = new HashMap<String, String>();
       queryParams.put(kBaseUrl, urlParts[0]);
       if (urlParts.length > 1) {
-        var params = urlParts[1].split("&");
-        for (var param : params) {
-          var keyValue = param.split("=", 2);
+        String[] params = urlParts[1].split("&");
+        for (String param : params) {
+          String[] keyValue = param.split("=", 2);
           if (keyValue.length == 2) {
             queryParams.put(keyValue[0].toLowerCase(), keyValue[1]);
           }
@@ -60,32 +57,27 @@ public class L4Driver implements Driver {
     }
   }
 
-  public HttpClient createHttpClient() throws SQLException {
+  private void configureTLSIfNeeded() throws SQLException {
     try {
-      var isHttps = L4Options.baseUrl.toLowerCase().startsWith("https://");
-      var cacert = L4Options.cacert;
-      if (!isHttps) {
-        return L4Http.defaultHttpClient(L4Options.timeoutSec).build();
-      } else if (L4Options.insecure) {
-        return L4Http.newTLSSClientInsecure(L4Options.timeoutSec).build();
-      } else if (cacert != null && !cacert.isEmpty()) {
-        return L4Http.newTLSSClient(cacert, L4Options.timeoutSec).build();
-      } else {
-        return HttpClient.newBuilder()
-          .sslContext(SSLContext.getDefault())
-          .connectTimeout(Duration.ofSeconds(L4Options.timeoutSec))
-          .build();
+      boolean isHttps = L4Options.baseUrl.toLowerCase().startsWith("https://");
+      String cacert = L4Options.cacert;
+      if (isHttps) {
+        if (L4Options.insecure) {
+          L4Http.configureInsecureTLS();
+        } else if (cacert != null && !cacert.isEmpty()) {
+          L4Http.configureTLSWithCACert(cacert);
+        }
       }
     } catch (Exception e) {
       throw badParam(e);
     }
   }
 
-  public L4Client createL4Client(HttpClient httpClient) throws SQLException {
+  public L4Client createL4Client() throws SQLException {
     try {
-      var user = L4Options.user;
-      var password = L4Options.password;
-      var client = new L4Client(L4Options.baseUrl, httpClient);
+      String user = L4Options.user;
+      String password = L4Options.password;
+      L4Client client = new L4Client(L4Options.baseUrl);
       if (user != null && password != null) {
         return client.withBasicAuth(user, password);
       }
@@ -96,8 +88,10 @@ public class L4Driver implements Driver {
   }
 
   private Properties mergeProperties(Properties info, Map<String, String> queryParams) {
-    var merged = new Properties();
-    queryParams.forEach(merged::setProperty);
+    Properties merged = new Properties();
+    for (Map.Entry<String, String> entry : queryParams.entrySet()) {
+      merged.setProperty(entry.getKey(), entry.getValue());
+    }
     if (info != null) {
       merged.putAll(info);
     }
@@ -110,8 +104,8 @@ public class L4Driver implements Driver {
     }
     try {
       L4Options.update(mergeProperties(info, getQueryParams(url)));
-      var httpClient = createHttpClient();
-      var client = createL4Client(httpClient);
+      configureTLSIfNeeded();
+      L4Client client = createL4Client();
       return new L4Conn(client);
     } catch (Exception e) {
       throw badState("Failed to establish connection", e);
@@ -119,8 +113,8 @@ public class L4Driver implements Driver {
   }
 
   @Override public DriverPropertyInfo[] getPropertyInfo(String url, Properties info) {
-    var mergedProps = mergeProperties(info, new HashMap<>());
-    var props = new DriverPropertyInfo[10];
+    Properties mergedProps = mergeProperties(info, new HashMap<String, String>());
+    DriverPropertyInfo[] props = new DriverPropertyInfo[10];
 
     props[0] = new DriverPropertyInfo(kUser, mergedProps.getProperty(kUser));
     props[0].description = "Username for rqlite authentication";

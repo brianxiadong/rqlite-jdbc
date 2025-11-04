@@ -35,14 +35,14 @@ public class L4Options {
       return new String[0];
     }
     int nonNullCount = 0;
-    for (var s : input) {
+    for (String s : input) {
       if (s != null) {
         nonNullCount++;
       }
     }
-    var result = new String[nonNullCount];
+    String[] result = new String[nonNullCount];
     int index = 0;
-    for (var s : input) {
+    for (String s : input) {
       if (s != null) {
         result[index++] = s;
       }
@@ -51,7 +51,7 @@ public class L4Options {
   }
 
   public static String queryParams(boolean transaction) {
-    var pairs = new String[] {
+    String[] pairs = new String[] {
       queue ? kv("queue", true) : null,
       transaction ? kv("transaction", true) : null,
       kv("timings", true),
@@ -62,7 +62,7 @@ public class L4Options {
       kv("freshness", format("%ds", freshnessSec)),
       kv("freshness_strict", freshnessStrict)
     };
-    var params = String.join("&", filterNulls(pairs));
+    String params = String.join("&", filterNulls(pairs));
     return String.format("?%s", params);
   }
 

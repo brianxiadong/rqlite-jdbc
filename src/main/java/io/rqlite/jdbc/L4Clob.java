@@ -2,129 +2,77 @@ package io.rqlite.jdbc;
 
 import javax.sql.rowset.serial.SerialClob;
 import java.io.*;
-import java.nio.charset.StandardCharsets;
-import java.sql.*;
-
-import static io.rqlite.jdbc.L4Err.*;
+import java.sql.Clob;
+import java.sql.SQLException;
 
 public class L4Clob implements Clob {
 
-  private StringBuilder data;
-  private SerialClob serialClob;
-  private boolean isClosed = false;
-
-  public L4Clob() throws SQLException {
-    this.data = new StringBuilder();
-    this.serialClob = new SerialClob(new char[0]);
-  }
-
-  private void checkClosed() throws SQLException {
-    if (isClosed) {
-      throw generalError("Clob is closed");
-    }
-  }
-
-  private void updateSerialClob() throws SQLException {
-    try {
-      this.serialClob = new SerialClob(data.toString().toCharArray());
-    } catch (Exception e) {
-      throw badUpdate(e);
-    }
-  }
+  private StringBuilder data = new StringBuilder();
 
   @Override public long length() throws SQLException {
-    checkClosed();
-    return serialClob.length();
+    return data.length();
   }
 
   @Override public String getSubString(long pos, int length) throws SQLException {
-    checkClosed();
-    return serialClob.getSubString(pos, length);
+    int offset = (int) (pos - 1);
+    return data.substring(offset, offset + length);
   }
 
   @Override public Reader getCharacterStream() throws SQLException {
-    checkClosed();
-    return serialClob.getCharacterStream();
-  }
-
-  @Override public Reader getCharacterStream(long pos, long length) throws SQLException {
-    checkClosed();
-    return serialClob.getCharacterStream(pos, length);
+    return new StringReader(data.toString());
   }
 
   @Override public InputStream getAsciiStream() throws SQLException {
-    checkClosed();
-    return serialClob.getAsciiStream();
-  }
-
-  @Override public long position(String searchstr, long start) throws SQLException {
-    checkClosed();
-    return serialClob.position(searchstr, start);
-  }
-
-  @Override public long position(Clob searchstr, long start) throws SQLException {
-    checkClosed();
-    return serialClob.position(searchstr, start);
+    try {
+      return new ByteArrayInputStream(data.toString().getBytes("US-ASCII"));
+    } catch (java.io.UnsupportedEncodingException e) {
+      throw new SQLException("Unsupported ASCII encoding", e);
+    }
   }
 
   @Override public int setString(long pos, String str) throws SQLException {
-    checkClosed();
-    int start = (int) pos - 1;
-    if (start + str.length() > data.length()) {
-      data.setLength(start);
-      data.append(str);
-    } else {
-      data.replace(start, start + str.length(), str);
-    }
-    updateSerialClob();
-    return str.length();
+    int offset = (int) (pos - 1);
+    String substr = str.substring(offset, Math.min(str.length(), offset + str.length()));
+    data.replace(offset, offset + substr.length(), substr);
+    return substr.length();
   }
 
   @Override public int setString(long pos, String str, int offset, int len) throws SQLException {
-    checkClosed();
-    var substr = str.substring(offset, offset + len);
-    return setString(pos, substr);
-  }
-
-  @Override public Writer setCharacterStream(long pos) throws SQLException {
-    checkClosed();
-    return new StringWriter() {
-      @Override public void write(String str) {
-        try {
-          setString(pos, str);
-        } catch (Exception e) {
-          throw new IllegalStateException(e);
-        }
-      }
-    };
+    int base = (int) (pos - 1);
+    String substr = str.substring(offset, offset + len);
+    data.replace(base, base + substr.length(), substr);
+    return substr.length();
   }
 
   @Override public OutputStream setAsciiStream(long pos) throws SQLException {
-    checkClosed();
-    return new ByteArrayOutputStream() {
-      @Override public void write(byte[] b) throws IOException {
-        try {
-          setString(pos, new String(b, StandardCharsets.US_ASCII));
-        } catch (SQLException e) {
-          throw new IOException(e);
-        }
-      }
-    };
+    throw new SQLException("Feature not supported");
+  }
+
+  @Override public Writer setCharacterStream(long pos) throws SQLException {
+    throw new SQLException("Feature not supported");
+  }
+
+  @Override public Reader getCharacterStream(long pos, long length) throws SQLException {
+    return new StringReader(getSubString(pos, (int) length));
+  }
+
+  @Override public long position(String searchstr, long start) throws SQLException {
+    int idx = data.indexOf(searchstr, (int) (start - 1));
+    return idx >= 0 ? idx + 1 : -1;
+  }
+
+  @Override public long position(Clob searchstr, long start) throws SQLException {
+    return position(searchstr.getSubString(1, (int) searchstr.length()), start);
   }
 
   @Override public void truncate(long len) throws SQLException {
-    checkClosed();
-    data.setLength((int) len);
-    updateSerialClob();
+    if (len < data.length()) {
+      data.setLength((int) len);
+    }
   }
 
   @Override public void free() throws SQLException {
-    if (!isClosed) {
-      data = null;
-      serialClob.free();
-      serialClob = null;
-      isClosed = true;
-    }
+    data.setLength(0);
   }
 
 }

@@ -1,6 +1,8 @@
 package io.rqlite.client;
 
 import io.rqlite.json.JsonObject;
+import io.rqlite.json.JsonArray;
+import io.rqlite.json.JsonValue;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -16,7 +18,7 @@ public class L4Response {
   public int            statusCode;
 
   public void print(PrintStream out) {
-    for (var res : results) {
+    for (L4Result res : results) {
       res.print(out);
     }
   }
@@ -29,24 +31,24 @@ public class L4Response {
   }
 
   public static L4Response response(int statusCode, JsonObject obj) {
-    var r = new L4Response();
+    L4Response r = new L4Response();
     r.statusCode = statusCode;
-    var res = obj.get("results");
+    JsonValue res = obj.get("results");
     if (res != null) {
-      var resultsArray = res.asArray();
-      r.results = new ArrayList<>();
-      for (var resultValue : resultsArray) {
+      JsonArray resultsArray = res.asArray();
+      r.results = new ArrayList<L4Result>();
+      for (JsonValue resultValue : resultsArray) {
         r.results.add(new L4Result(resultValue.asObject()));
       }
     } else {
-      r.results = new ArrayList<>();
+      r.results = new ArrayList<L4Result>();
     }
     r.time = obj.get("time") != null ? obj.getFloat("time", -1) : null;
     return r;
   }
 
   public static L4Response deferred(L4Statement[] statements) {
-    var r = new L4Response();
+    L4Response r = new L4Response();
     r.statements = Objects.requireNonNull(statements);
     return r;
   }

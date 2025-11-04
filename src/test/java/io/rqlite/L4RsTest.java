@@ -56,13 +56,13 @@ public class L4RsTest {
   static {
     if (L4Tests.runIntegrationTests) {
       it("Validates L4Rs against a live rqlite instance", () -> {
-        var stmt = new L4Ps(rq, "SELECT 1");
+        L4Ps stmt = new L4Ps(rq, "SELECT 1");
 
-        var dr = rq.executeSingle("DROP TABLE IF EXISTS rs_test_data");
+        io.rqlite.client.L4Response dr = rq.executeSingle("DROP TABLE IF EXISTS rs_test_data");
         assertEquals(200, dr.statusCode);
 
         // Create table with diverse data types
-        var createTable = join("\n", "",
+        String createTable = join("\n", "",
           "CREATE TABLE rs_test_data (",
           "  id INTEGER PRIMARY KEY AUTOINCREMENT,",
           "  num_val NUMERIC,",
@@ -84,20 +84,20 @@ public class L4RsTest {
           "  blob_val BLOB", // For BLOB
           ")"
         );
-        var res0 = rq.executeSingle(createTable);
+        io.rqlite.client.L4Response res0 = rq.executeSingle(createTable);
         assertEquals(200, res0.statusCode);
 
-        var resP = rq.querySingle("PRAGMA table_info(rs_test_data)");
-        for (var result : resP.results) {
+        io.rqlite.client.L4Response resP = rq.querySingle("PRAGMA table_info(rs_test_data)");
+        for (io.rqlite.client.L4Result result : resP.results) {
           System.out.println(result.columns);
           System.out.println(result.types);
-          for (var row : result.values) {
+          for (java.util.List<String> row : result.values) {
             System.out.println(row);
           }
         }
 
         // Insert test data: valid values and NULLs
-        var insertSql = join("", "",
+        String insertSql = join("", "",
           "INSERT INTO rs_test_data (",
           "  num_val, bool_val, tiny_val, small_val, int_val, big_val, float_val, double_val,",
           "  text_val, date_val, time_val, ts_val, url_val, clob_val, nclob_val, nstring_val, blob_val",
@@ -105,8 +105,8 @@ public class L4RsTest {
           "  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?",
           ")"
         );
-        var blobData = Base64.getEncoder().encodeToString("Hello, rqlite!".getBytes(StandardCharsets.UTF_8));
-        var res2 = rq.execute(
+        String blobData = Base64.getEncoder().encodeToString("Hello, rqlite!".getBytes(StandardCharsets.UTF_8));
+        io.rqlite.client.L4Response res2 = rq.execute(
           true,
           new L4Statement().sql(insertSql).withPositionalParams(
             123.45, // num_val
@@ -150,15 +150,15 @@ public class L4RsTest {
         assertEquals(200, res2.statusCode);
 
         // Query data and test L4Rs
-        var res3 = rq.querySingle("SELECT * FROM rs_test_data");
+        io.rqlite.client.L4Response res3 = rq.querySingle("SELECT * FROM rs_test_data");
         assertEquals(200, res3.statusCode);
-        var result = res3.results.get(0);
-        var rs = new L4Rs(result, stmt);
+        io.rqlite.client.L4Result result = res3.results.get(0);
+        L4Rs rs = new L4Rs(result, stmt);
 
-        var meta = rs.getMetaData();
+        ResultSetMetaData meta = rs.getMetaData();
 
-        for (var col : result.columns) {
-          var idx = rs.findColumn(col);
+        for (String col : result.columns) {
+          int idx = rs.findColumn(col);
           System.out.printf(
             "typename: %s, r: %s, w: %s, dw: %s%n",
             meta.getColumnTypeName(idx), meta.isReadOnly(idx),
@@ -232,21 +232,21 @@ public class L4RsTest {
         assertEquals("Hello, world!", rs.getString("text_val"));
 
         // Normalize expected date to UTC and debug
-        var utcCalendar = Calendar.getInstance(TimeZone.getTimeZone("UTC")); // UTC Calendar
-        var localDate = LocalDate.of(2023, 10, 15);
-        var zdt = localDate.atStartOfDay(ZoneId.of("UTC"));
-        var expectedDate = new Date(zdt.toInstant().toEpochMilli());
-        var actualDate = rs.getDate("date_val", utcCalendar);
+        Calendar utcCalendar = Calendar.getInstance(TimeZone.getTimeZone("UTC")); // UTC Calendar
+        LocalDate localDate = LocalDate.of(2023, 10, 15);
+        ZonedDateTime zdt = localDate.atStartOfDay(ZoneId.of("UTC"));
+        Date expectedDate = new Date(zdt.toInstant().toEpochMilli());
+        Date actualDate = rs.getDate("date_val", utcCalendar);
         assertEquals(expectedDate.getTime(), actualDate.getTime());
         assertEquals(expectedDate, actualDate);
 
         assertEquals(Time.valueOf("14:30:00"), rs.getTime("time_val"));
 
         // Normalize expected timestamp to UTC
-        var expectedTsLocal = LocalDateTime.of(2023, 10, 15, 14, 30, 0);
-        var expectedTsZdt = expectedTsLocal.atZone(ZoneId.of("UTC"));
-        var expectedTs = new Timestamp(expectedTsZdt.toInstant().toEpochMilli());
-        var actualTs = rs.getTimestamp("ts_val", utcCalendar); // Use utcCalendar
+        LocalDateTime expectedTsLocal = LocalDateTime.of(2023, 10, 15, 14, 30, 0);
+        ZonedDateTime expectedTsZdt = expectedTsLocal.atZone(ZoneId.of("UTC"));
+        Timestamp expectedTs = new Timestamp(expectedTsZdt.toInstant().toEpochMilli());
+        Timestamp actualTs = rs.getTimestamp("ts_val", utcCalendar); // Use utcCalendar
         System.out.println("Expected TS millis: " + expectedTs.getTime() + " (" + expectedTs + ")");
         System.out.println("Actual TS millis: " + actualTs.getTime() + " (" + actualTs + ")");
         assertEquals(expectedTs, actualTs);
@@ -273,11 +273,11 @@ public class L4RsTest {
         assertEquals("This is an NSTRING", readReader(rs.getNCharacterStream("nstring_val")));
         assertEquals("Hello, rqlite!", new String(readStream(rs.getBinaryStream("blob_val")), StandardCharsets.UTF_8));
 
-        var blob = rs.getBlob("blob_val");
-        var str = new String(blob.getBytes(1, (int) blob.length()));
+        Blob blob = rs.getBlob("blob_val");
+        String str = new String(blob.getBytes(1, (int) blob.length()));
         assertEquals("Hello, rqlite!", str);
 
-        var obj = rs.getObject("blob_val", new HashMap<>());
+        Object obj = rs.getObject("blob_val", new HashMap<>());
         assertNotNull(obj);
 
         // Test row 2: NULL values
@@ -361,11 +361,11 @@ public class L4RsTest {
 
       // New test block: Test ResultSet navigation and state
       it("Tests L4Rs navigation and state methods", () -> {
-        var stmt = new L4Ps(rq, "SELECT 1");
-        var res3 = rq.querySingle("SELECT * FROM rs_test_data");
+        L4Ps stmt = new L4Ps(rq, "SELECT 1");
+        io.rqlite.client.L4Response res3 = rq.querySingle("SELECT * FROM rs_test_data");
         assertEquals(200, res3.statusCode);
-        var result = res3.results.get(0);
-        var rs = new L4Rs(result, stmt);
+        io.rqlite.client.L4Result result = res3.results.get(0);
+        L4Rs rs = new L4Rs(result, stmt);
 
         // Test initial state
         assertTrue(rs.isBeforeFirst());
@@ -410,11 +410,11 @@ public class L4RsTest {
       });
 
       it("Tests L4Rs unsupported operations and error handling", () -> {
-        var stmt = new L4Ps(rq, "SELECT 1");
-        var res3 = rq.querySingle("SELECT * FROM rs_test_data");
+        L4Ps stmt = new L4Ps(rq, "SELECT 1");
+        io.rqlite.client.L4Response res3 = rq.querySingle("SELECT * FROM rs_test_data");
         assertEquals(200, res3.statusCode);
-        var result = res3.results.get(0);
-        var rs = new L4Rs(result, stmt);
+        io.rqlite.client.L4Result result = res3.results.get(0);
+        L4Rs rs = new L4Rs(result, stmt);
 
         assertTrue(rs.next());
 
@@ -558,11 +558,11 @@ public class L4RsTest {
       });
 
       it("Tests L4Rs with empty ResultSet", () -> {
-        var stmt = new L4Ps(rq, "SELECT 1");
-        var res = rq.querySingle("SELECT * FROM rs_test_data WHERE id = 999");
+        L4Ps stmt = new L4Ps(rq, "SELECT 1");
+        io.rqlite.client.L4Response res = rq.querySingle("SELECT * FROM rs_test_data WHERE id = 999");
         assertEquals(200, res.statusCode);
-        var result = res.results.get(0);
-        var rs = new L4Rs(result, stmt);
+        io.rqlite.client.L4Result result = res.results.get(0);
+        L4Rs rs = new L4Rs(result, stmt);
 
         // Test empty ResultSet
         assertFalse(rs.isBeforeFirst());
@@ -573,7 +573,7 @@ public class L4RsTest {
         assertFalse(rs.next());
 
         // Test metadata
-        var meta = rs.getMetaData();
+        ResultSetMetaData meta = rs.getMetaData();
         assertEquals(18, meta.getColumnCount());
         assertEquals(Types.INTEGER, meta.getColumnType(1));
 
@@ -587,11 +587,11 @@ public class L4RsTest {
       });
 
       it("Tests L4Rs with invalid column index and edge cases", () -> {
-        var stmt = new L4Ps(rq, "SELECT 1");
-        var res3 = rq.querySingle("SELECT * FROM rs_test_data");
+        L4Ps stmt = new L4Ps(rq, "SELECT 1");
+        io.rqlite.client.L4Response res3 = rq.querySingle("SELECT * FROM rs_test_data");
         assertEquals(200, res3.statusCode);
-        var result = res3.results.get(0);
-        var rs = new L4Rs(result, stmt);
+        io.rqlite.client.L4Result result = res3.results.get(0);
+        L4Rs rs = new L4Rs(result, stmt);
 
         assertTrue(rs.next());
 

@@ -5,6 +5,8 @@ import j8spec.annotation.DefinedOrder;
 import j8spec.junit.J8SpecRunner;
 import org.junit.runner.RunWith;
 
+import java.io.PrintStream;
+
 import static io.rqlite.jdbc.L4Db.*;
 import static j8spec.J8Spec.*;
 
@@ -17,7 +19,7 @@ public class L4DbTest {
   static {
     if (L4Tests.runIntegrationTests) {
       it("Retrieves basic DB metadata", () -> {
-        var o = System.out;
+        PrintStream o = System.out;
         dbGetTables(null, null, rq).print(o);
         dbGetTables("%", null, rq).print(o);
         dbGetTableTypes(rq).print(o);

@@ -30,7 +30,7 @@ public class L4Result {
 
   public int indexOf(String column) {
     for (int i = 0; i < columns.size(); i++) {
-      var name = columns.get(i);
+      String name = columns.get(i);
       if (name.equalsIgnoreCase(column)) {
         return i;
       }
@@ -47,7 +47,7 @@ public class L4Result {
   }
 
   public L4Result addRow(String ... values) {
-    var row = Arrays.asList(values);
+    List<String> row = Arrays.asList(values);
     this.values.add(row);
     return this;
   }
@@ -77,7 +77,7 @@ public class L4Result {
       return;
     }
 
-    var maxWidths = new int[columns.size()]; // Calculate max width for each column
+    int[] maxWidths = new int[columns.size()]; // Calculate max width for each column
     for (int i = 0; i < columns.size(); i++) {
       maxWidths[i] = columns.get(i).length();
       for (List<String> row : values) {
@@ -95,7 +95,7 @@ public class L4Result {
 
     for (int width : maxWidths) { // Print separator
       out.print("| ");
-      out.print("-".repeat(width));
+      out.print(new String(new char[width]).replace('\0', '-'));
       out.print(" ");
     }
     out.println("|");

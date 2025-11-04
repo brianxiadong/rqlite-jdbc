@@ -21,6 +21,40 @@ public class L4Ps extends L4St implements PreparedStatement {
   private L4Statement statement;
   private boolean resultSetAvailable = false;
 
+  // JDK8-compatible stream helpers
+  private static byte[] readNBytesCompat(InputStream in, int length) throws IOException {
+    ByteArrayOutputStream baos = new ByteArrayOutputStream(Math.max(0, length));
+    byte[] buf = new byte[4096];
+    int remaining = length;
+    while (remaining > 0) {
+      int n = in.read(buf, 0, Math.min(buf.length, remaining));
+      if (n == -1) break;
+      baos.write(buf, 0, n);
+      remaining -= n;
+    }
+    return baos.toByteArray();
+  }
+
+  private static byte[] readAllBytesCompat(InputStream in) throws IOException {
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    byte[] buf = new byte[4096];
+    int n;
+    while ((n = in.read(buf)) != -1) {
+      baos.write(buf, 0, n);
+    }
+    return baos.toByteArray();
+  }
+
+  private static String readAllCharsCompat(Reader reader) throws IOException {
+    StringWriter writer = new StringWriter();
+    char[] buf = new char[4096];
+    int n;
+    while ((n = reader.read(buf)) != -1) {
+      writer.write(buf, 0, n);
+    }
+    return writer.toString();
+  }
+
   public L4Ps(L4Client client, L4Conn conn, String sql) throws SQLException {
     super(client, conn);
     if (sql == null || sql.trim().isEmpty()) {
@@ -44,9 +78,9 @@ public class L4Ps extends L4St implements PreparedStatement {
     closeCurrentResultSet();
     currentResultIndex = -1;
     try {
-      var isSelect = isSelect(statement.sql);
+      boolean isSelect = isSelect(statement.sql);
       currentResponse = isSelect ? client.query(statement) : client.execute(isAutoCommit(), statement);
-      var result = checkResult(currentResponse.first());
+      io.rqlite.client.L4Result result = checkResult(currentResponse.first());
       currentResultIndex = 0;
       resultSetAvailable = isSelect && result.columns != null && !result.columns.isEmpty();
       if (resultSetAvailable) {
@@ -78,7 +112,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       throw generalError("Statement is a query");
     }
     executeInternal();
-    var result = currentResponse.first();
+    io.rqlite.client.L4Result result = currentResponse.first();
     return result.rowsAffected != null ? result.rowsAffected : 0;
   }
 
@@ -102,9 +136,9 @@ public class L4Ps extends L4St implements PreparedStatement {
     try {
       currentResponse = client.execute(isAutoCommit(), batch.toArray(new L4Statement[0]));
       batch.clear();
-      var updateCounts = new int[currentResponse.results.size()];
+      int[] updateCounts = new int[currentResponse.results.size()];
       for (int i = 0; i < currentResponse.results.size(); i++) {
-        var result = currentResponse.results.get(i);
+        io.rqlite.client.L4Result result = currentResponse.results.get(i);
         if (result.error != null) {
           throw new BatchUpdateException(result.error, SqlStateConnectionError, 0, updateCounts, null);
         }
@@ -112,7 +146,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       }
       return updateCounts;
     } catch (Exception e) {
-      var counts = new int[batch.size()];
+      int[] counts = new int[batch.size()];
       Arrays.fill(counts, EXECUTE_FAILED);
       batch.clear();
       throw new BatchUpdateException("Batch execution failed", SqlStateConnectionError, 0, counts, e);
@@ -185,7 +219,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       setNull(parameterIndex, Types.DATE);
       return;
     }
-    var utcDate = L4Utc.utcOf(x);
+    java.time.LocalDate utcDate = L4Utc.utcOf(x);
     statement.withPositionalParam(parameterIndex - 1, utcDate.toString()); // Format: YYYY-MM-DD
   }
 
@@ -195,7 +229,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       setNull(parameterIndex, Types.TIME);
       return;
     }
-    var utcTime = L4Utc.utcOf(x);
+    java.time.LocalTime utcTime = L4Utc.utcOf(x);
     statement.withPositionalParam(parameterIndex - 1, utcTime.toString()); // Format: HH:MM:SS
   }
 
@@ -215,7 +249,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var bytes = x.readNBytes(length);
+      byte[] bytes = readNBytesCompat(x, length);
       statement.withPositionalParam(parameterIndex - 1, new String(bytes, StandardCharsets.US_ASCII));
     } catch (IOException e) {
       throw badParam(e);
@@ -229,7 +263,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var bytes = x.readNBytes(length);
+      byte[] bytes = readNBytesCompat(x, length);
       statement.withPositionalParam(parameterIndex - 1, new String(bytes, StandardCharsets.UTF_16));
     } catch (IOException e) {
       throw badParam(e);
@@ -243,7 +277,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var bytes = x.readNBytes(length);
+      byte[] bytes = readNBytesCompat(x, length);
       statement.withPositionalParam(parameterIndex - 1, Base64.getEncoder().encodeToString(bytes));
     } catch (IOException e) {
       throw badParam(e);
@@ -272,7 +306,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var chars = new char[length];
+      char[] chars = new char[length];
       int read = reader.read(chars);
       if (read == -1) {
         setNull(parameterIndex, Types.VARCHAR);
@@ -296,7 +330,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var bytes = x.getBytes(1, (int) x.length());
+      byte[] bytes = x.getBytes(1, (int) x.length());
       statement.withPositionalParam(parameterIndex - 1, Base64.getEncoder().encodeToString(bytes));
     } catch (SQLException e) {
       throw badParam(e);
@@ -310,7 +344,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var chars = x.getSubString(1, (int) x.length());
+      String chars = x.getSubString(1, (int) x.length());
       statement.withPositionalParam(parameterIndex - 1, chars);
     } catch (SQLException e) {
       throw badParam(e);
@@ -337,7 +371,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       setNull(parameterIndex, Types.DATE);
       return;
     }
-    var utcDate = L4Utc.utcOf(x);
+    java.time.LocalDate utcDate = L4Utc.utcOf(x);
     statement.withPositionalParam(parameterIndex - 1, utcDate.toString()); // Format: YYYY-MM-DD
   }
 
@@ -347,7 +381,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       setNull(parameterIndex, Types.TIME);
       return;
     }
-    var utcTime = L4Utc.utcOf(x);
+    java.time.LocalTime utcTime = L4Utc.utcOf(x);
     statement.withPositionalParam(parameterIndex - 1, utcTime.toString()); // Format: HH:MM:SS
   }
 
@@ -392,7 +426,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var chars = new char[(int) length];
+      char[] chars = new char[(int) length];
       int read = value.read(chars);
       if (read == -1) {
         setNull(parameterIndex, Types.NVARCHAR);
@@ -411,7 +445,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var chars = value.getSubString(1, (int) value.length());
+      String chars = value.getSubString(1, (int) value.length());
       statement.withPositionalParam(parameterIndex - 1, chars);
     } catch (SQLException e) {
       throw badParam(e);
@@ -425,7 +459,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var chars = new char[(int) length];
+      char[] chars = new char[(int) length];
       int read = reader.read(chars);
       if (read == -1) {
         setNull(parameterIndex, Types.CLOB);
@@ -444,7 +478,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var bytes = inputStream.readNBytes((int) length);
+      byte[] bytes = readNBytesCompat(inputStream, (int) length);
       statement.withPositionalParam(parameterIndex - 1, Base64.getEncoder().encodeToString(bytes));
     } catch (IOException e) {
       throw badParam(e);
@@ -458,7 +492,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var chars = new char[(int) length];
+      char[] chars = new char[(int) length];
       int read = reader.read(chars);
       if (read == -1) {
         setNull(parameterIndex, Types.NCLOB);
@@ -477,7 +511,7 @@ public class L4Ps extends L4St implements PreparedStatement {
 
   @Override public void setObject(int parameterIndex, Object x, int targetSqlType, int scaleOrLength) throws SQLException {
     checkClosed();
-    var converted = convertParameter(x, targetSqlType);
+    Object converted = convertParameter(x, targetSqlType);
     if (converted instanceof BigDecimal && scaleOrLength >= 0) {
       converted = ((BigDecimal) converted).setScale(scaleOrLength, RoundingMode.HALF_UP);
     }
@@ -491,7 +525,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var bytes = x.readNBytes((int) length);
+      byte[] bytes = readNBytesCompat(x, (int) length);
       statement.withPositionalParam(parameterIndex - 1, new String(bytes, StandardCharsets.US_ASCII));
     } catch (IOException e) {
       throw badParam(e);
@@ -505,7 +539,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var bytes = x.readNBytes((int) length);
+      byte[] bytes = readNBytesCompat(x, (int) length);
       statement.withPositionalParam(parameterIndex - 1, Base64.getEncoder().encodeToString(bytes));
     } catch (IOException e) {
       throw badParam(e);
@@ -519,7 +553,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var chars = new char[(int) length];
+      char[] chars = new char[(int) length];
       int read = reader.read(chars);
       if (read == -1) {
         setNull(parameterIndex, Types.VARCHAR);
@@ -538,7 +572,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var bytes = x.readAllBytes();
+      byte[] bytes = readAllBytesCompat(x);
       statement.withPositionalParam(parameterIndex - 1, new String(bytes, StandardCharsets.US_ASCII));
     } catch (IOException e) {
       throw badParam(e);
@@ -552,7 +586,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var bytes = x.readAllBytes();
+      byte[] bytes = readAllBytesCompat(x);
       statement.withPositionalParam(parameterIndex - 1, Base64.getEncoder().encodeToString(bytes));
     } catch (IOException e) {
       throw badParam(e);
@@ -566,9 +600,8 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var writer = new StringWriter();
-      reader.transferTo(writer);
-      statement.withPositionalParam(parameterIndex - 1, writer.toString());
+      String s = readAllCharsCompat(reader);
+      statement.withPositionalParam(parameterIndex - 1, s);
     } catch (IOException e) {
       throw badParam(e);
     }
@@ -581,9 +614,8 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var writer = new StringWriter();
-      value.transferTo(writer);
-      statement.withPositionalParam(parameterIndex - 1, writer.toString());
+      String s = readAllCharsCompat(value);
+      statement.withPositionalParam(parameterIndex - 1, s);
     } catch (IOException e) {
       throw badParam(e);
     }
@@ -596,9 +628,8 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var writer = new StringWriter();
-      reader.transferTo(writer);
-      statement.withPositionalParam(parameterIndex - 1, writer.toString());
+      String s = readAllCharsCompat(reader);
+      statement.withPositionalParam(parameterIndex - 1, s);
     } catch (IOException e) {
       throw badParam(e);
     }
@@ -611,7 +642,7 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var bytes = inputStream.readAllBytes();
+      byte[] bytes = readAllBytesCompat(inputStream);
       statement.withPositionalParam(parameterIndex - 1, Base64.getEncoder().encodeToString(bytes));
     } catch (IOException e) {
       throw badParam(e);
@@ -625,9 +656,8 @@ public class L4Ps extends L4St implements PreparedStatement {
       return;
     }
     try {
-      var writer = new StringWriter();
-      reader.transferTo(writer);
-      statement.withPositionalParam(parameterIndex - 1, writer.toString());
+      String s = readAllCharsCompat(reader);
+      statement.withPositionalParam(parameterIndex - 1, s);
     } catch (IOException e) {
       throw badParam(e);
     }

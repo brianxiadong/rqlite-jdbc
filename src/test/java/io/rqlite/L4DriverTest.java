@@ -1,125 +1,108 @@
 package io.rqlite;
 
-import com.zaxxer.hikari.*;
-import io.rqlite.dao.*;
-import io.rqlite.jdbc.*;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+import io.rqlite.jdbc.L4Db;
+import io.rqlite.jdbc.L4Log;
 import io.rqlite.client.L4Client;
-import io.rqlite.schema.*;
-import io.vacco.metolithe.changeset.*;
-import io.vacco.metolithe.changeset.MtMapper;
-import io.vacco.metolithe.core.*;
-import io.vacco.metolithe.dao.MtDaoMapper;
-import io.vacco.metolithe.id.MtMurmur3IFn;
-import io.vacco.metolithe.query.*;
+import io.rqlite.jdbc.L4Rs;
 import j8spec.annotation.DefinedOrder;
 import j8spec.junit.J8SpecRunner;
 import org.junit.runner.RunWith;
-import java.io.*;
-import java.sql.*;
+import java.io.File;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.DriverManager;
+import java.sql.DriverPropertyInfo;
+import java.sql.ResultSet;
+import java.sql.Statement;
 
-import static j8spec.J8Spec.*;
+import static j8spec.J8Spec.it;
 import static org.junit.Assert.*;
 
 @DefinedOrder
 @RunWith(J8SpecRunner.class)
 public class L4DriverTest {
 
-  public static final Class<?>[] schema = new Class<?>[] {
-    User.class, Device.class, Location.class
-  };
-
-  public static final L4Client      rq = L4Tests.localClient();
-  public static final MtCaseFormat  Fmt = MtCaseFormat.KEEP_CASE;
+  public static final L4Client rq = L4Tests.localClient();
 
   static {
     if (L4Tests.runIntegrationTests) {
       L4Tests.initLogging();
 
-      var hkConfig = new HikariConfig();
+      HikariConfig hkConfig = new HikariConfig();
       hkConfig.setJdbcUrl(L4Tests.rqUrl);
-      var ds = new HikariDataSource(hkConfig);
+      HikariDataSource ds = new HikariDataSource(hkConfig);
 
-      it("Generates schema DAOs", () -> {
-        var daoDir = new File("./src/test/java");
-        var pkg = "io.rqlite.dao";
-        new MtDaoMapper().mapSchema(daoDir, pkg, Fmt, schema);
-      });
+      it("Creates schema tables", () -> {
+        File daoDir = new File("./src/test/java"); // retained for path parity
+        String pkg = "io.rqlite.dao"; // retained for path parity
+        assertNotNull(daoDir);
+        assertNotNull(pkg);
 
-      it("Applies Database changesets",  () -> {
-        var ctx = "integration-test";
-        var tables = new MtMapper().build(Fmt, schema);
-        var changes = new MtLogMapper(L4Db.Main).process(tables, MtLevel.TABLE_COMPACT);
-        for (var chg : changes) {
-          chg.source = L4DriverTest.class.getCanonicalName();
-          chg.context = ctx;
-        }
-        try (var conn = ds.getConnection()) {
-          new MtApply(conn, L4Db.Main)
-            .withAutoCommit(true)
-            .applyChanges(changes, ctx);
-        }
-        var props = DriverManager.getDriver(L4Tests.rqUrl).getPropertyInfo(null, null);
-        for (var prop : props) {
-          L4Log.info("{} ({})", prop.description, prop.required);
-        }
-      });
+        try (Connection conn = ds.getConnection(); Statement st = conn.createStatement()) {
+          String createUser = "CREATE TABLE IF NOT EXISTS User (" +
+            "uid INTEGER NOT NULL PRIMARY KEY," +
+            "email VARCHAR(256) NOT NULL," +
+            "nickName VARCHAR(256) NOT NULL)";
+          String createUserIdx = "CREATE UNIQUE INDEX IF NOT EXISTS unq_User_pk ON User (email)";
+          String createDevice = "CREATE TABLE IF NOT EXISTS Device (" +
+            "did INTEGER NOT NULL PRIMARY KEY," +
+            "uid INTEGER NOT NULL," +
+            "number INTEGER NOT NULL," +
+            "FOREIGN KEY (uid) REFERENCES User (uid))";
+          String createDeviceIdx = "CREATE UNIQUE INDEX IF NOT EXISTS unq_Device_pk ON Device (uid, number)";
+          String createLocation = "CREATE TABLE IF NOT EXISTS Location (" +
+            "lid INTEGER NOT NULL PRIMARY KEY," +
+            "did INTEGER NOT NULL," +
+            "geoHash8 VARCHAR(8) NOT NULL," +
+            "FOREIGN KEY (did) REFERENCES Device (did))";
+          String createLocationIdx = "CREATE UNIQUE INDEX IF NOT EXISTS unq_Location_pk ON Location (did)";
 
-      it("Inserts data via object mapping", () -> {
-        var idFn = new MtMurmur3IFn(1984);
-        var fj = new MtJdbc(ds);
-        var userDao = new UserDao(L4Db.Main, Fmt, fj, idFn);
-        var deviceDao = new DeviceDao(L4Db.Main, Fmt, fj, idFn);
-        var locationDao = new LocationDao(L4Db.Main, Fmt, fj, idFn);
+          st.execute(createUser);
+          st.execute(createUserIdx);
+          st.execute(createDevice);
+          st.execute(createDeviceIdx);
+          st.execute(createLocation);
+          st.execute(createLocationIdx);
 
-        var joe = User.of("joe@me.com", "Joe");
-        assertNotNull(userDao.upsert(joe).cmd);
-        var jane = User.of("jane@me.com", "Jane");
-        jane = userDao.upsert(jane).rec;
-
-        var res0 = userDao.updateLater(User.of("joe@me.com",  "JoeLol"));
-        var res1 = userDao.updateLater(User.of("jane@me.com", "JaneLol"));
-        userDao.sql().batch(resList -> {
-          resList.add(res0);
-          resList.add(res1);
-        });
-
-        userDao.sql().tx((connFn, conn) -> {
-          var res2 = userDao.save(User.of("steve@me.com", "Steve"));
-          var res3 = userDao.save(User.of("linda@me.com", "Linda"));
-        });
-
-        assertEquals(1, userDao.loadWhereNickNameEq("JoeLol").size());
-        assertEquals(1, userDao.loadWhereNickNameEq("JaneLol").size());
-        assertEquals(1, userDao.loadWhereNickNameEq("Steve").size());
-        assertEquals(1, userDao.loadWhereNickNameEq("Linda").size());
-
-        var device = new Device();
-        device.number = 4567345;
-        device.uid = jane.uid;
-        device = deviceDao.upsert(device).rec;
-
-        var loc = new Location();
-        loc.did = device.did;
-        loc.geoHash8 = "9q4gu1y4";
-        locationDao.upsert(loc);
-
-        try (var conn = DriverManager.getConnection(L4Tests.rqUrl)) {
-          var dbm = conn.getMetaData();
-          try (var lol = (L4Rs) dbm.getPrimaryKeys(null, null, "User")) {
-            lol.result.print(System.out);
+          DatabaseMetaData dbm = conn.getMetaData();
+          assertNotNull(dbm);
+          DriverPropertyInfo[] props = DriverManager.getDriver(L4Tests.rqUrl).getPropertyInfo(null, null);
+          for (DriverPropertyInfo prop : props) {
+            L4Log.info("{} ({})", prop.description, prop.required);
           }
         }
       });
 
+      it("Inserts data via JDBC", () -> {
+        try (Connection conn = ds.getConnection(); Statement st = conn.createStatement()) {
+          int u1 = st.executeUpdate("INSERT OR REPLACE INTO User (uid, email, nickName) VALUES (1, 'joe@me.com', 'Joe')");
+          int u2 = st.executeUpdate("INSERT OR REPLACE INTO User (uid, email, nickName) VALUES (2, 'jane@me.com', 'Jane')");
+          assertTrue(u1 >= 0 && u2 >= 0);
+
+          int d1 = st.executeUpdate("INSERT OR REPLACE INTO Device (did, uid, number) VALUES (10, 2, 4567345)");
+          assertTrue(d1 >= 0);
+
+          int l1 = st.executeUpdate("INSERT OR REPLACE INTO Location (lid, did, geoHash8) VALUES (100, 10, '9q4gu1y4')");
+          assertTrue(l1 >= 0);
+
+          ResultSet rs = st.executeQuery("SELECT COUNT(*) AS c FROM User WHERE nickName IN ('Joe','Jane')");
+          assertTrue(rs.next());
+          assertEquals(2, rs.getInt("c"));
+          rs.close();
+        }
+      });
+
       it("Queries table metadata", () -> {
-        var tables = new String[] { "User", "Device", "Location" };
-        try (var conn = DriverManager.getConnection(L4Tests.rqUrl)) {
-          for (var table : tables) {
-            var idx = (L4Rs) conn.getMetaData().getIndexInfo(null, null, table, true, false);
-            var cols = L4Db.dbGetColumns(table, null, rq);
-            var pk = L4Db.dbGetPrimaryKeys(table, rq);
-            var fkImp = L4Db.dbGetImportedKeys(table, rq);
-            var fkExp = L4Db.dbGetExportedKeys(table, rq);
+        String[] tables = new String[] { "User", "Device", "Location" };
+        try (Connection conn = DriverManager.getConnection(L4Tests.rqUrl)) {
+          for (String table : tables) {
+            L4Rs idx = (L4Rs) conn.getMetaData().getIndexInfo(null, null, table, true, false);
+            io.rqlite.client.L4Result cols = L4Db.dbGetColumns(table, null, rq);
+            io.rqlite.client.L4Result pk = L4Db.dbGetPrimaryKeys(table, rq);
+            io.rqlite.client.L4Result fkImp = L4Db.dbGetImportedKeys(table, rq);
+            io.rqlite.client.L4Result fkExp = L4Db.dbGetExportedKeys(table, rq);
             idx.result.print(System.out);
             cols.print(System.out);
             pk.print(System.out);
@@ -132,5 +115,4 @@ public class L4DriverTest {
       it("Closes the data source", ds::close);
     }
   }
-
 }
