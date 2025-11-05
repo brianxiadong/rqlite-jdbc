@@ -17,7 +17,7 @@ JDBC operations like queries, updates, and batch processing in a clustered envir
 
 ### Prerequisites
 
-- Java 11 or higher
+- JDK 8 or higher
 - `rqlite` server running (e.g., `http://localhost:4001`)
 
 Install from [Maven Central](https://mvnrepository.com/artifact/io.rqlite/rqlite-jdbc)
@@ -33,18 +33,18 @@ Connect to an `rqlite` instance and execute queries using standard JDBC APIs.
 ```
 import java.sql.*;
 
-var url = "jdbc:rqlite:http://localhost:4001";
+String url = "jdbc:rqlite:http://localhost:4001";
 
 try (Connection conn = DriverManager.getConnection(url)) {
-    var stmt = conn.createStatement();
+    Statement stmt = conn.createStatement();
     stmt.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)");
 
-    var ps = conn.prepareStatement("INSERT INTO users (name, age) VALUES (?, ?)");
+    PreparedStatement ps = conn.prepareStatement("INSERT INTO users (name, age) VALUES (?, ?)");
     ps.setString(1, "Alice");
     ps.setInt(2, 30);
     ps.executeUpdate();
 
-    var rs = stmt.executeQuery("SELECT * FROM users");
+    ResultSet rs = stmt.executeQuery("SELECT * FROM users");
     while (rs.next()) {
         System.out.println("ID: " + rs.getInt("id") + ", Name: " + rs.getString("name") + ", Age: " + rs.getInt("age"));
     }
